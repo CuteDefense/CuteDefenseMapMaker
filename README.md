@@ -1,2 +1,2 @@
-# CuteDefenseMapMaker.github.io
+# CuteDefenseMapMaker
 A custom Map Maker for Cute Defense
