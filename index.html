@@ -926,44 +926,78 @@ function exportOverlayPng() {
   toast('Exported ' + name, 'ok');
 }
 
+// Tolerant SC2Bank parser. Tries DOMParser first; if the browser rejects the
+// file (BOM, encoding quirk, etc.) it falls back to a regex scan. The format is
+// simple and machine-generated, so the regex path is reliable. Returns
+// { mh, mv, points:[{px,py,type}] } in the raw stored (game) coordinate frame.
+function parseBank(text) {
+  text = String(text).replace(/^\uFEFF/, '').trim();   // drop a UTF-8 BOM / leading whitespace
+  const data = { mh: false, mv: false, points: [] };
+  const isOn = flag => flag === '0';                   // "Disabled Mirror": 0 = mirror ON
+
+  // ---- attempt 1: DOMParser ----
+  try {
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (!doc.querySelector('parsererror')) {
+      const sections = Array.from(doc.getElementsByTagName('Section'));
+      if (sections.length) {
+        for (const sec of sections) {
+          const name = sec.getAttribute('name') || '';
+          if (TILE_TYPES.includes(name)) {
+            for (const v of sec.getElementsByTagName('Value')) {
+              const pt = v.getAttribute('point');
+              if (!pt) continue;
+              const [a, b] = pt.split(',');
+              const px = parseInt(a, 10), py = parseInt(b, 10);
+              if (Number.isFinite(px) && Number.isFinite(py)) data.points.push({ px, py, type: name });
+            }
+          } else if (/mirror/i.test(name)) {
+            for (const key of sec.getElementsByTagName('Key')) {
+              const n = (key.getAttribute('name') || '').toLowerCase();
+              const v = key.getElementsByTagName('Value')[0];
+              const flag = v && v.getAttribute('flag');
+              if (n === 'horizontal') data.mh = isOn(flag);
+              else if (n === 'vertical') data.mv = isOn(flag);
+            }
+          }
+        }
+        return data;
+      }
+    }
+  } catch (e) { /* fall through to regex */ }
+
+  // ---- attempt 2: regex scan (BOM/namespace/attr-order proof) ----
+  const secRe = /<Section\s+name="([^"]*)"\s*>([\s\S]*?)<\/Section>/g;
+  let m;
+  while ((m = secRe.exec(text))) {
+    const name = m[1], body = m[2];
+    if (TILE_TYPES.includes(name)) {
+      let pm; const ptRe = /point="\s*(-?\d+)\s*,\s*(-?\d+)\s*"/g;
+      while ((pm = ptRe.exec(body))) data.points.push({ px: +pm[1], py: +pm[2], type: name });
+    } else if (/mirror/i.test(name)) {
+      let km; const keyRe = /<Key\s+name="([^"]*)"\s*>([\s\S]*?)<\/Key>/g;
+      while ((km = keyRe.exec(body))) {
+        const kn = km[1].toLowerCase();
+        const fm = /flag="\s*(\d+)\s*"/.exec(km[2]);
+        if (fm) { if (kn === 'horizontal') data.mh = isOn(fm[1]); else if (kn === 'vertical') data.mv = isOn(fm[1]); }
+      }
+    }
+  }
+  return data;
+}
+
 function loadBankXML(text) {
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
-  if (doc.querySelector('parsererror')) { toast('Load failed: not valid XML.', 'bad'); return; }
+  const data = parseBank(text);
 
-  const sections = Array.from(doc.getElementsByTagName('Section'));
-  const sectionByName = name => sections.find(s => (s.getAttribute('name') || '') === name);
-
-  // Mirror flags from the "Disabled Mirror" section: flag 0 = mirror ON.
-  let mh = false, mv = false;
-  const mirrorSec = sections.find(s => /mirror/i.test(s.getAttribute('name') || ''));
-  if (mirrorSec) {
-    for (const key of mirrorSec.getElementsByTagName('Key')) {
-      const n = (key.getAttribute('name') || '').toLowerCase();
-      const v = key.getElementsByTagName('Value')[0];
-      const flag = v && v.getAttribute('flag');
-      if (n === 'horizontal') mh = flag === '0';
-      else if (n === 'vertical') mv = flag === '0';
-    }
-  }
-
-  // Parse EVERY stored wall (all type sections). The stored point is the game
-  // corner; subtract the offset to get the editor's bottom-left anchor.
+  // Stored points are in the game frame; subtract the corner offset to get the
+  // editor's bottom-left anchor. Keep EVERY wall that lands in bounds.
   const loaded = [];
-  for (const type of TILE_TYPES) {
-    const sec = sectionByName(type);
-    if (!sec) continue;
-    for (const key of sec.getElementsByTagName('Key')) {
-      const v = key.getElementsByTagName('Value')[0];
-      const pt = v && v.getAttribute('point');
-      if (!pt) continue;
-      const parts = pt.split(',');
-      const px = parseInt(parts[0], 10), py = parseInt(parts[1], 10);
-      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
-      const x = px - PT_DX, y = py - PT_DY;
-      if (!inBoundsAnchor(x, y)) continue;
-      loaded.push({ x, y, type });
-    }
+  for (const p of data.points) {
+    const x = p.px - PT_DX, y = p.py - PT_DY;
+    if (inBoundsAnchor(x, y)) loaded.push({ x, y, type: p.type });
   }
+  if (!loaded.length) { toast('Load failed: no walls found in the file.', 'bad'); return; }
+  const mh = data.mh, mv = data.mv;
 
   // Reset, then FORCE-LOAD every stored wall plus its mirror reflections. No
   // canonical filtering and no prune, so no saved wall is ever cleared.
