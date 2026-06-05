@@ -20,9 +20,11 @@
     7. Input handling
     8. UI wiring & init
 
-  Grid: 256x256 cells. (0,0) is bottom-left, (255,255) is top-right.
-  Every tile is a 2x2 footprint anchored at its bottom-left cell (x,y), covering
-  (x,y),(x+1,y),(x,y+1),(x+1,y+1). No rotation, no overlap, no out-of-bounds.
+  Grid: 256x256 cells. (0,0) is the TOP-LEFT corner; x increases right, y
+  increases DOWN — matching the SC2 bank coordinate system.
+  Every tile is a 2x2 footprint anchored at its TOP-LEFT cell (x,y), covering
+  (x,y),(x+1,y),(x,y+1),(x+1,y+1) (extending right and down). No rotation, no
+  overlap, no out-of-bounds.
 -->
 <style>
   :root {
@@ -105,9 +107,16 @@
     padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px;
     background: var(--panel-2); color: var(--text); cursor: pointer; font: inherit; width: 100%;
   }
-  .btn:hover { border-color: var(--accent); }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn:disabled { opacity: .4; cursor: default; }
   .row { display: flex; gap: 8px; }
+
+  .select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel-2); color: var(--text); font: inherit; cursor: pointer;
+  }
+  .select:focus { outline: none; border-color: var(--accent); }
 
   .status {
     display: flex; align-items: center; gap: 8px; padding: 9px 10px;
@@ -122,6 +131,8 @@
   .meta b { color: var(--text); font-weight: 600; }
   .hint { color: var(--muted); font-size: 10.5px; line-height: 1.5; }
   .hint code { background:#11131a; border:1px solid var(--line); border-radius:3px; padding:0 3px; }
+  .hint a { color: var(--accent); text-decoration: none; }
+  .hint a:hover { text-decoration: underline; }
 
   /* ---- Canvas stage ---- */
   #stage { position: relative; flex: 1 1 auto; min-width: 0; }
@@ -143,6 +154,13 @@
   #toast.show { opacity: 1; }
   #toast.bad { border-color: var(--bad); color: #ffd7d7; }
   #toast.ok { border-color: var(--ok); }
+
+  #minimap {
+    position: absolute; right: 10px; bottom: 10px; width: 168px; height: 168px;
+    border: 1px solid var(--line); border-radius: 6px; background: #0b0c10;
+    cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.45);
+  }
+  #minimap.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -168,10 +186,10 @@
 
     <div class="group">
       <div class="label">Mode</div>
-      <div class="toggle">
-        <label for="versus">Versus (forces H-mirror)</label>
-        <label class="switch"><input type="checkbox" id="versus"><span class="slider"></span></label>
-      </div>
+      <select id="mode" class="select">
+        <option value="standard">Standard</option>
+        <option value="versus">Versus</option>
+      </select>
     </div>
 
     <div class="group">
@@ -191,11 +209,23 @@
       <div class="status" id="validity"><span class="led"></span><span class="txt">—</span></div>
       <div class="hint">Pathing checks two phases. Red &amp; blue flowers are walls only in their own phase, so a room walled with both keeps a door open each phase. Tall shrubs &amp; yellow flowers always block. A 2-tile map border is unbuildable; Versus mode splits the field into two mirrored lanes.</div>
       <div class="row">
+        <button class="btn" id="undoBtn" disabled>Undo</button>
+        <button class="btn" id="redoBtn" disabled>Redo</button>
+      </div>
+      <div class="row">
         <button class="btn primary" id="saveBtn">Save .SC2Bank</button>
         <button class="btn" id="loadBtn">Load</button>
       </div>
       <button class="btn" id="clearBtn">Clear map</button>
       <input type="file" id="fileInput" accept=".SC2Bank,.xml,text/xml" hidden>
+    </div>
+
+    <div class="group">
+      <div class="label">View</div>
+      <div class="toggle">
+        <label for="minimapToggle">Minimap (bottom-right)</label>
+        <label class="switch"><input type="checkbox" id="minimapToggle" checked><span class="slider"></span></label>
+      </div>
     </div>
 
     <div class="group">
@@ -209,10 +239,20 @@
     <div class="group">
       <div class="label">Controls</div>
       <div class="hint">
-        <b>Left-drag</b> paint / erase / box-fill.<br>
+        <b>Left-drag</b> paint / erase / draw a room.<br>
         <b>Right</b> or <b>middle drag</b> (or <code>Space</code>+drag) to pan.<br>
-        <b>Wheel</b> zooms toward the cursor.<br>
-        Keys: <code>1-4</code> tiles, <code>B/R/E/H</code> tools, <code>G</code> grid, <code>Ctrl+S</code> save.
+        <b>Wheel</b> zooms toward the cursor. Click the minimap to jump.<br>
+        Keys: <code>1-4</code> tiles, <code>B/R/E/H</code> tools, <code>G</code> grid, <code>M</code> minimap,
+        <code>Ctrl+Z</code>/<code>Ctrl+Y</code> undo/redo, <code>Ctrl+S</code> save.
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">Support</div>
+      <div class="hint">
+        Like the editor? Support development:<br>
+        <a href="https://paypal.me/AmethySlime" target="_blank" rel="noopener noreferrer">PayPal &middot; AmethySlime</a><br>
+        <a href="https://www.patreon.com/Amethyslime" target="_blank" rel="noopener noreferrer">Patreon &middot; Amethyslime</a>
       </div>
     </div>
   </aside>
@@ -220,6 +260,7 @@
   <!-- ============================= CANVAS STAGE ============================= -->
   <div id="stage">
     <canvas id="view"></canvas>
+    <canvas id="minimap" title="Click to jump to a location"></canvas>
     <div id="readout">cell —, —</div>
     <div id="toast"></div>
   </div>
@@ -243,7 +284,7 @@ let   MIN_SCALE = 1;          // recomputed from canvas size (fit-the-map zoom-o
 const BORDER = 2;
 const NORMAL_AREA  = { x0: BORDER, y0: BORDER, x1: GRID - 1 - BORDER, y1: GRID - 1 - BORDER }; // [2,253]^2
 const VERSUS_AREA  = { x0: 2,   y0: 34, x1: 254, y1: 222 };
-const VERSUS_BLACK = { x0: 116, y0: 34, x1: 140, y1: 238 };
+const VERSUS_BLACK = { x0: 116, y0: 34, x1: 140, y1: 222 };  // spans the playable height exactly
 
 const TILE_TYPES = ['TallShrubs', 'Flowers', 'RedFlowers', 'BlueFlowers'];
 const TYPE_COLOR = {
@@ -281,6 +322,7 @@ const state = {
   mirrorV: false,
   versus: false,           // versus mode: forced H-mirror + restricted playable area
   showGrid: true,
+  showMinimap: true,
 
   // camera: (camX,camY) is the world point centred in the viewport
   scale: 4,
@@ -307,30 +349,41 @@ const ctx = canvas.getContext('2d');
 const stage = document.getElementById('stage');
 let viewW = 1, viewH = 1; // CSS px dimensions of the canvas
 
+// Minimap (bottom-right) + an offscreen 1px-per-cell cache of the whole map so
+// the minimap only re-renders the map image when tiles/mode change, not on pan.
+const MM = 168;            // minimap CSS size (square, matches the square map)
+const minimap = document.getElementById('minimap');
+const mmCtx = minimap.getContext('2d');
+const mapCacheCanvas = document.createElement('canvas');
+mapCacheCanvas.width = GRID; mapCacheCanvas.height = GRID;
+const mapCacheCtx = mapCacheCanvas.getContext('2d');
+let mapCacheDirty = true;
+
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const keyOf = (x, y) => x + ',' + y;
 
 /* ===========================================================================
  * 2. COORDINATE / CAMERA MATH
- * World y points up; screen y points down, so y is flipped on conversion.
+ * Top-left origin: world y increases downward, the same direction as screen y,
+ * so no axis flip is needed on conversion.
  * ======================================================================== */
 
 function worldToScreen(wx, wy) {
   return {
     x: (wx - state.camX) * state.scale + viewW / 2,
-    y: viewH / 2 - (wy - state.camY) * state.scale,
+    y: (wy - state.camY) * state.scale + viewH / 2,
   };
 }
 function screenToWorld(sx, sy) {
   return {
     x: (sx - viewW / 2) / state.scale + state.camX,
-    y: (viewH / 2 - sy) / state.scale + state.camY,
+    y: (sy - viewH / 2) / state.scale + state.camY,
   };
 }
 // Screen rectangle covering the world box [wx0,wy0]-[wx1,wy1].
 function worldRectToScreen(wx0, wy0, wx1, wy1) {
-  const tl = worldToScreen(wx0, wy1);  // higher world-y -> top of screen
-  const br = worldToScreen(wx1, wy0);
+  const tl = worldToScreen(wx0, wy0);  // y-down: smaller world-y is the top
+  const br = worldToScreen(wx1, wy1);
   return { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y };
 }
 function cellUnderScreen(sx, sy) {
@@ -361,11 +414,11 @@ function fitView() {
 const inBoundsAnchor = (x, y) => x >= 0 && y >= 0 && x <= MAX_ANCHOR && y <= MAX_ANCHOR;
 const footprint = (x, y) => [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]];
 
-// Reflection of a 2x2 ANCHOR. Normal mode mirrors about the map centre line
-// (x = 127.5): reflecting both cells of a footprint (c' = 255 - c) and taking
-// the new bottom-left gives anchor' = 254 - x. Versus mode is symmetric about
-// cell 128 (the centre of the playable area and black bar), so anchor' = 255 - x
-// — this keeps mirrored tiles landing inside the opposite lane.
+// Reflection of a 2x2 ANCHOR (its top-left cell). Normal mode mirrors about the
+// map centre line (127.5): reflecting both cells of a footprint (c' = 255 - c)
+// and taking the new top-left gives anchor' = 254 - x. Versus mode is symmetric
+// about cell 128 (the centre of the playable area and black bar), so
+// anchor' = 255 - x — this keeps mirrored tiles landing inside the opposite lane.
 const reflX = x => (state.versus ? GRID - 1 : GRID - 2) - x;
 const reflY = y => (state.versus ? GRID - 1 : GRID - 2) - y;
 
@@ -380,8 +433,8 @@ function orbit(x, y) {
 }
 
 // Canonical = the minimal unique region that is SAVED. Horizontal -> left half
-// (x <= 127), vertical -> bottom half (y <= 127), both -> bottom-left quadrant.
-// The other side(s) are reconstructed by reflection on load.
+// (x <= 127); vertical -> TOP half (y <= 127, since y is top-down); both ->
+// top-left quadrant. The other side(s) are reconstructed by reflection on load.
 function inCanonical(x, y) {
   if (state.mirrorH && x >= HALF) return false;
   if (state.mirrorV && y >= HALF) return false;
@@ -398,6 +451,7 @@ function addTile(x, y, type) {
   tileAt.set(keyOf(x, y), placedTiles.length);
   placedTiles.push({ x, y, type });
   markOcc(x, y, 1);
+  mapCacheDirty = true;
 }
 function removeTileAt(x, y) {
   const k = keyOf(x, y);
@@ -412,6 +466,7 @@ function removeTileAt(x, y) {
     tileAt.set(keyOf(moved.x, moved.y), i);
   }
   placedTiles.pop();
+  mapCacheDirty = true;
   return true;
 }
 function rebuildDerived() {                // rebuild index + occupancy from placedTiles
@@ -422,6 +477,7 @@ function rebuildDerived() {                // rebuild index + occupancy from pla
     tileAt.set(keyOf(t.x, t.y), i);
     markOcc(t.x, t.y, 1);
   }
+  mapCacheDirty = true;
 }
 
 // Which tile anchor (if any) covers cell (cx,cy)? At most one, since tiles never
@@ -563,6 +619,7 @@ function rebuildPlayable() {
         playableBuf[cy * GRID + cx] = 0;
   }
   labelChambers();
+  mapCacheDirty = true;
 }
 
 // Connected components of the playable area (ignoring tiles).
@@ -740,6 +797,7 @@ function loadBankXML(text) {
   }
 
   // Reset and reconstruct the full map from the canonical region.
+  commitHistory(snapshot());   // loading is undoable -> back to the pre-load map
   placedTiles = [];
   tileAt.clear();
   occ.fill(0);
@@ -765,6 +823,54 @@ function loadBankXML(text) {
 }
 
 /* ===========================================================================
+ * 5b. UNDO / REDO — snapshot the map + mode before each committed change
+ * ======================================================================== */
+
+const undoStack = [];
+const redoStack = [];
+let pendingUndo = null;     // snapshot captured at the start of a paint/erase/room stroke
+
+function snapshot() {
+  return {
+    tiles: placedTiles.map(t => ({ x: t.x, y: t.y, type: t.type })),
+    mirrorH: state.mirrorH, mirrorV: state.mirrorV, versus: state.versus,
+  };
+}
+function restoreSnapshot(s) {
+  placedTiles = s.tiles.map(t => ({ x: t.x, y: t.y, type: t.type }));
+  state.mirrorH = s.mirrorH; state.mirrorV = s.mirrorV; state.versus = s.versus;
+  rebuildDerived();
+  rebuildPlayable();
+  syncControls();
+  recomputeValidity();
+  updateMeta();
+  requestRender();
+}
+function commitHistory(prev) {             // push the pre-change state; a new action clears redo
+  undoStack.push(prev);
+  if (undoStack.length > 200) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoButtons();
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(snapshot());
+  restoreSnapshot(undoStack.pop());
+  updateUndoButtons();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(snapshot());
+  restoreSnapshot(redoStack.pop());
+  updateUndoButtons();
+}
+function updateUndoButtons() {
+  const u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
+  if (u) u.disabled = undoStack.length === 0;
+  if (r) r.disabled = redoStack.length === 0;
+}
+
+/* ===========================================================================
  * 6. RENDERING — canvas only, redrawn on interaction (rAF-coalesced)
  * ======================================================================== */
 
@@ -776,6 +882,7 @@ function requestRender() {
 }
 
 function render() {
+  if (mapCacheDirty) { renderMapCache(); mapCacheDirty = false; }
   const dpr = window.devicePixelRatio || 1;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // draw in CSS px; backing store is DPR-scaled
   ctx.clearRect(0, 0, viewW, viewH);
@@ -786,17 +893,18 @@ function render() {
   drawAxes();
   drawBorder();
   drawGhost();
+  if (state.showMinimap) drawMinimap();
 }
 
-// Four quadrant background. (0,0) is bottom-left in world space.
+// Four quadrant background. (0,0) is top-left in world space (y increases down).
 function drawBackground() {
   ctx.fillStyle = '#0b0c10';
   ctx.fillRect(0, 0, viewW, viewH);
   const quads = [
-    [0, 0, HALF, HALF, '#1763b8'],      // bottom-left  -> blue
-    [HALF, 0, GRID, HALF, '#268a3e'],   // bottom-right -> green
-    [0, HALF, HALF, GRID, '#caa01f'],   // top-left     -> yellow
-    [HALF, HALF, GRID, GRID, '#c22f2f'],// top-right     -> red
+    [0, 0, HALF, HALF, '#caa01f'],      // top-left     -> yellow
+    [HALF, 0, GRID, HALF, '#c22f2f'],   // top-right    -> red
+    [0, HALF, HALF, GRID, '#1763b8'],   // bottom-left  -> blue
+    [HALF, HALF, GRID, GRID, '#268a3e'],// bottom-right -> green
   ];
   for (const [x0, y0, x1, y1, col] of quads) {
     const r = worldRectToScreen(x0, y0, x1, y1);
@@ -945,6 +1053,60 @@ function drawUnbuildable() {
   }
 }
 
+// --- Minimap ---------------------------------------------------------------
+// mapCacheCanvas is a 1px-per-cell image of the whole map, rebuilt only when
+// tiles/mode change. The visible minimap blits it scaled + the viewport box.
+function mcFill(cx0, cy0, cx1, cy1, color) {   // fill a cell-rect on the cache (y-down, same as world)
+  mapCacheCtx.fillStyle = color;
+  mapCacheCtx.fillRect(cx0, cy0, cx1 - cx0, cy1 - cy0);
+}
+function renderMapCache() {
+  mapCacheCtx.clearRect(0, 0, GRID, GRID);
+  mcFill(0, 0, HALF, HALF, '#caa01f');       // top-left yellow
+  mcFill(HALF, 0, GRID, HALF, '#c22f2f');    // top-right red
+  mcFill(0, HALF, HALF, GRID, '#1763b8');    // bottom-left blue
+  mcFill(HALF, HALF, GRID, GRID, '#268a3e'); // bottom-right green
+  mcFill(0, 0, GRID, GRID, 'rgba(0,0,0,0.18)');
+  for (const t of placedTiles) mcFill(t.x, t.y, t.x + 2, t.y + 2, TYPE_COLOR[t.type]);
+  const a = state.versus ? VERSUS_AREA : NORMAL_AREA;
+  const dim = 'rgba(8,9,12,0.72)';
+  mcFill(0, 0, GRID, a.y0, dim);             // bottom margin
+  mcFill(0, a.y1 + 1, GRID, GRID, dim);      // top margin
+  mcFill(0, a.y0, a.x0, a.y1 + 1, dim);      // left margin
+  mcFill(a.x1 + 1, a.y0, GRID, a.y1 + 1, dim); // right margin
+  if (state.versus) {
+    const k = VERSUS_BLACK;
+    mcFill(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID), '#000');
+  }
+}
+function drawMinimap() {
+  const dpr = window.devicePixelRatio || 1;
+  mmCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mmCtx.clearRect(0, 0, MM, MM);
+  mmCtx.imageSmoothingEnabled = false;
+  mmCtx.drawImage(mapCacheCanvas, 0, 0, GRID, GRID, 0, 0, MM, MM);
+  // current viewport rectangle
+  const tl = screenToWorld(0, 0), br = screenToWorld(viewW, viewH);
+  const wx0 = clamp(Math.min(tl.x, br.x), 0, GRID), wx1 = clamp(Math.max(tl.x, br.x), 0, GRID);
+  const wy0 = clamp(Math.min(tl.y, br.y), 0, GRID), wy1 = clamp(Math.max(tl.y, br.y), 0, GRID);
+  const rx = wx0 / GRID * MM, rw = (wx1 - wx0) / GRID * MM;
+  const ry = wy0 / GRID * MM, rh = (wy1 - wy0) / GRID * MM;
+  mmCtx.lineWidth = 1.5;
+  mmCtx.strokeStyle = 'rgba(255,255,255,0.9)';
+  mmCtx.strokeRect(rx + 0.75, ry + 0.75, Math.max(2, rw - 1.5), Math.max(2, rh - 1.5));
+}
+// Jump / drag the camera from a minimap pointer position.
+function minimapJump(e) {
+  const r = minimap.getBoundingClientRect();
+  const fx = clamp((e.clientX - r.left) / r.width, 0, 1);
+  const fy = clamp((e.clientY - r.top) / r.height, 0, 1);
+  state.camX = fx * GRID;
+  state.camY = fy * GRID;                    // minimap and world both top-down
+  clampCamera();
+  updateReadout();
+  requestRender();
+}
+
 function ghostRect(x, y, ok) {
   const s = worldRectToScreen(x, y, x + 2, y + 2);
   ctx.fillStyle = ok ? hexA(TYPE_COLOR[state.type], 0.55) : 'rgba(239,75,75,0.35)';
@@ -1053,6 +1215,7 @@ function onPointerDown(e) {
   }
   if (e.button !== 0) return;
 
+  pendingUndo = snapshot();   // captured here; committed at pointerup if the stroke changed anything
   const cell = cellUnderScreen(p.x, p.y);
   if (state.tool === 'brush')  { state.mode = 'paint'; state.lastCell = cell; placeAtCell(cell.x, cell.y, state.type); }
   else if (state.tool === 'eraser') { state.mode = 'erase'; state.lastCell = cell; eraseAtCell(cell.x, cell.y); }
@@ -1071,7 +1234,7 @@ function onPointerMove(e) {
     const dx = (p.x - state.panLast.x) / state.scale;
     const dy = (p.y - state.panLast.y) / state.scale;
     state.camX -= dx;
-    state.camY += dy;                       // world-y is flipped vs screen-y
+    state.camY -= dy;                       // y-down: world and screen y move together
     state.panLast = p;
     clampCamera();
     requestRender();
@@ -1102,7 +1265,8 @@ function onPointerUp(e) {
   state.lastCell = null;
   state.selStart = null;
   state.panLast = null;
-  if (wasStructural) recomputeValidity();
+  if (wasStructural) { if (pendingUndo) commitHistory(pendingUndo); recomputeValidity(); }
+  pendingUndo = null;
   updateMeta();
   requestRender();
 }
@@ -1125,13 +1289,20 @@ function onWheel(e) {
 function onKeyDown(e) {
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { state.spaceDown = true; canvas.classList.add('pan-tool'); e.preventDefault(); return; }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveMap(); return; }
+  if (e.ctrlKey || e.metaKey) {            // editor shortcuts; everything else falls through to the browser
+    const k = e.key.toLowerCase();
+    if (k === 's') { e.preventDefault(); saveMap(); }
+    else if (k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    else if (k === 'y') { e.preventDefault(); redo(); }
+    return;
+  }
   switch (e.key.toLowerCase()) {
     case 'b': setTool('brush'); break;
     case 'r': setTool('room'); break;
     case 'e': setTool('eraser'); break;
     case 'h': setTool('pan'); break;
     case 'g': state.showGrid = !state.showGrid; requestRender(); break;
+    case 'm': setMinimap(!state.showMinimap); break;
     case '1': setType(TILE_TYPES[0]); break;
     case '2': setType(TILE_TYPES[1]); break;
     case '3': setType(TILE_TYPES[2]); break;
@@ -1174,7 +1345,9 @@ function setTool(tool) {
 }
 
 function onMirrorToggle(which, enabled) {
-  if (which === 'H') { if (state.versus) { syncControls(); return; } state.mirrorH = enabled; }
+  if (which === 'H' && state.versus) { syncControls(); return; }  // H is locked on in versus
+  commitHistory(snapshot());
+  if (which === 'H') state.mirrorH = enabled;
   else state.mirrorV = enabled;
   if (enabled) resymmetrize();              // enabling makes the canonical side authoritative
   recomputeValidity();
@@ -1184,6 +1357,7 @@ function onMirrorToggle(which, enabled) {
 
 // Versus: force horizontal mirror on, restrict to the versus playable area.
 function onVersusToggle(enabled) {
+  commitHistory(snapshot());
   state.versus = enabled;
   if (enabled) state.mirrorH = true;        // forced on; also flips reflX to the versus axis
   rebuildPlayable();                        // playable mask depends on the mode
@@ -1200,8 +1374,8 @@ function syncControls() {                   // reflect state -> UI (after load /
   h.checked = state.mirrorH;
   h.disabled = state.versus;                // can't turn H off while in versus mode
   document.getElementById('mirrorV').checked = state.mirrorV;
-  const v = document.getElementById('versus');
-  if (v) v.checked = state.versus;
+  const m = document.getElementById('mode');
+  if (m) m.value = state.versus ? 'versus' : 'standard';
 }
 
 function updateMeta() {
@@ -1210,9 +1384,9 @@ function updateMeta() {
   document.getElementById('zoomPct').textContent = Math.round(state.scale * 100 / 6) + '%';
   let region;
   if (state.versus) region = 'versus · left lane';
-  else if (state.mirrorH && state.mirrorV) region = 'bottom-left quadrant';
+  else if (state.mirrorH && state.mirrorV) region = 'top-left quadrant';
   else if (state.mirrorH) region = 'left half';
-  else if (state.mirrorV) region = 'bottom half';
+  else if (state.mirrorV) region = 'top half';
   else region = 'full map';
   document.getElementById('storedRegion').textContent = region;
 }
@@ -1232,13 +1406,31 @@ function toast(msg, kind) {
 }
 
 function clearMap() {
+  if (!placedTiles.length) { toast('Map is already empty', 'ok'); return; }
+  commitHistory(snapshot());
   placedTiles = [];
   tileAt.clear();
   occ.fill(0);
+  mapCacheDirty = true;
   recomputeValidity();
   updateMeta();
   requestRender();
   toast('Map cleared', 'ok');
+}
+
+function setupMinimap() {
+  const dpr = window.devicePixelRatio || 1;
+  minimap.width = Math.floor(MM * dpr);
+  minimap.height = Math.floor(MM * dpr);
+  minimap.style.width = MM + 'px';
+  minimap.style.height = MM + 'px';
+}
+function setMinimap(on) {
+  state.showMinimap = on;
+  minimap.classList.toggle('hidden', !on);
+  const cb = document.getElementById('minimapToggle');
+  if (cb) cb.checked = on;
+  if (on) requestRender();
 }
 
 function resize() {
@@ -1250,6 +1442,7 @@ function resize() {
   canvas.height = Math.floor(viewH * dpr);
   canvas.style.width = viewW + 'px';
   canvas.style.height = viewH + 'px';
+  setupMinimap();
   recomputeMinScale();
   clampCamera();
   requestRender();
@@ -1262,15 +1455,25 @@ function init() {
   for (const el of document.querySelectorAll('#tools .tool'))
     el.addEventListener('click', () => setTool(el.dataset.tool));
 
-  // mode + mirror toggles
-  document.getElementById('versus').addEventListener('change', e => onVersusToggle(e.target.checked));
+  // mode dropdown + mirror toggles
+  document.getElementById('mode').addEventListener('change', e => onVersusToggle(e.target.value === 'versus'));
   document.getElementById('mirrorH').addEventListener('change', e => onMirrorToggle('H', e.target.checked));
   document.getElementById('mirrorV').addEventListener('change', e => onMirrorToggle('V', e.target.checked));
 
   // buttons
+  document.getElementById('undoBtn').addEventListener('click', undo);
+  document.getElementById('redoBtn').addEventListener('click', redo);
   document.getElementById('saveBtn').addEventListener('click', saveMap);
   document.getElementById('clearBtn').addEventListener('click', clearMap);
   document.getElementById('loadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+
+  // minimap: toggle + click/drag to jump
+  document.getElementById('minimapToggle').addEventListener('change', e => setMinimap(e.target.checked));
+  let mmDragging = false;
+  minimap.addEventListener('pointerdown', e => { mmDragging = true; minimap.setPointerCapture(e.pointerId); minimapJump(e); });
+  minimap.addEventListener('pointermove', e => { if (mmDragging) minimapJump(e); });
+  minimap.addEventListener('pointerup', () => { mmDragging = false; });
+  minimap.addEventListener('pointercancel', () => { mmDragging = false; });
   document.getElementById('fileInput').addEventListener('change', e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1294,9 +1497,11 @@ function init() {
 
   resize();
   fitView();
+  setupMinimap();
   rebuildPlayable();      // build the playable mask + lane labels before first validity check
   recomputeValidity();
   updateMeta();
+  updateUndoButtons();
   requestRender();
 }
 
