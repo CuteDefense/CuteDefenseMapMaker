@@ -667,6 +667,28 @@ function applyMirror(axis, sourceLow) {
   rebuildDerived();
 }
 
+// Collapse ALL active mirrors to their denser source region (one quadrant), then
+// regenerate the full map at the CURRENT axis. Used when the mirror axis itself
+// changes (entering/leaving Versus): dropping the old reflections first prevents
+// re-mirroring them at the new axis and producing off-by-one duplicates.
+function resymmetrizeAll() {
+  let srcLowX = true, srcLowY = true;
+  if (state.mirrorV) { let lo = 0, hi = 0; for (const t of placedTiles) { if (t.x < HALF) lo++; else hi++; } srcLowX = lo >= hi; }
+  if (state.mirrorH) { let lo = 0, hi = 0; for (const t of placedTiles) { if (t.y < HALF) lo++; else hi++; } srcLowY = lo >= hi; }
+  const seen = new Set();
+  const next = [];
+  for (const t of placedTiles) {
+    if (state.mirrorV && reflX(t.x) !== t.x && (srcLowX ? t.x >= HALF : t.x < HALF)) continue;  // drop non-source x
+    if (state.mirrorH && reflY(t.y) !== t.y && (srcLowY ? t.y >= HALF : t.y < HALF)) continue;  // drop non-source y
+    for (const p of orbit(t.x, t.y)) {
+      const k = keyOf(p.x, p.y);
+      if (!seen.has(k)) { seen.add(k); next.push({ x: p.x, y: p.y, type: t.type }); }
+    }
+  }
+  placedTiles = next;
+  rebuildDerived();
+}
+
 /* ===========================================================================
  * 4. VALIDATION — playable area, lanes (chambers) & two-phase connectivity
  *
@@ -1580,7 +1602,9 @@ function onVersusToggle(enabled) {
   if (enabled) state.mirrorV = true;        // forced on; left<->right lane mirror (versus axis)
   rebuildPlayable();                        // playable mask depends on the mode
   pruneUnbuildable();                       // drop tiles now outside the playable area
-  if (enabled && state.mirrorV) applyMirror('V', mirrorPlan('V').sourceLow);  // denser lane wins
+  // The mirror axis changes with the mode, so rebuild from canonical to avoid
+  // duplicating existing reflections one cell off at the new axis.
+  if (state.mirrorH || state.mirrorV) resymmetrizeAll();
   syncControls();
   recomputeValidity();
   updateMeta();
