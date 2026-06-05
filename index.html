@@ -235,11 +235,11 @@
     <div class="group">
       <div class="label">Mirror</div>
       <div class="toggle">
-        <label for="mirrorH">Horizontal (left &harr; right)</label>
+        <label for="mirrorH">Horizontal (top &harr; bottom)</label>
         <label class="switch"><input type="checkbox" id="mirrorH"><span class="slider"></span></label>
       </div>
       <div class="toggle">
-        <label for="mirrorV">Vertical (top &harr; bottom)</label>
+        <label for="mirrorV">Vertical (left &harr; right)</label>
         <label class="switch"><input type="checkbox" id="mirrorV"><span class="slider"></span></label>
       </div>
       <div class="hint">Enabling a mirror copies whichever half has more walls onto the other half. You'll get a prompt telling you which way before it changes anything.</div>
@@ -257,7 +257,6 @@
         <span class="slotlbl">Save slot</span>
         <select id="slot" class="select slotsel">
           <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
-          <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
         </select>
       </div>
       <div class="hint" id="fileNameHint">CustomCuteDefenseMapStandard1.SC2Bank</div>
@@ -481,30 +480,31 @@ function fitView() {
 const inBoundsAnchor = (x, y) => x >= 0 && y >= 0 && x <= MAX_ANCHOR && y <= MAX_ANCHOR;
 const footprint = (x, y) => [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]];
 
-// Reflection of a 2x2 ANCHOR. Normal mode mirrors about the map centre line
-// (x = 127.5): reflecting both cells of a footprint (c' = 255 - c) and taking
-// the new bottom-left gives anchor' = 254 - x. Versus mode is symmetric about
-// cell 128 (the centre of the playable area and black bar), so anchor' = 255 - x
-// — this keeps mirrored tiles landing inside the opposite lane.
+// Reflection of a 2x2 ANCHOR. Mirroring flips a footprint (cell c' = 255 - c)
+// and takes its new bottom-left, giving anchor' = 254 - c (or 255 - c in Versus,
+// which is symmetric about cell 128 so mirrored tiles land in the opposite lane).
+//   reflX = flip across the VERTICAL axis  -> left <-> right  (Vertical mirror)
+//   reflY = flip across the HORIZONTAL axis -> top  <-> bottom (Horizontal mirror)
 const reflX = x => (state.versus ? GRID - 1 : GRID - 2) - x;
 const reflY = y => (state.versus ? GRID - 1 : GRID - 2) - y;
 
 // All distinct positions an edit touches under the active mirrors (1, 2 or 4).
+// Horizontal mirror flips top<->bottom (reflY); Vertical mirror flips left<->right (reflX).
 function orbit(x, y) {
   const pts = [{ x, y }];
   const add = (px, py) => { if (!pts.some(p => p.x === px && p.y === py)) pts.push({ x: px, y: py }); };
-  if (state.mirrorH) add(reflX(x), y);
-  if (state.mirrorV) add(x, reflY(y));
+  if (state.mirrorH) add(x, reflY(y));      // Horizontal: over the horizontal axis (top<->bottom)
+  if (state.mirrorV) add(reflX(x), y);      // Vertical: over the vertical axis (left<->right)
   if (state.mirrorH && state.mirrorV) add(reflX(x), reflY(y));
   return pts;
 }
 
-// Canonical = the minimal unique region that is SAVED. Horizontal -> left half
-// (x <= 127), vertical -> bottom half (y <= 127), both -> bottom-left quadrant.
+// Canonical = the minimal unique region that is SAVED. Horizontal -> bottom half
+// (y <= 127), Vertical -> left half (x <= 127), both -> bottom-left quadrant.
 // The other side(s) are reconstructed by reflection on load.
 function inCanonical(x, y) {
-  if (state.mirrorH && x >= HALF) return false;
-  if (state.mirrorV && y >= HALF) return false;
+  if (state.mirrorH && y >= HALF) return false;   // Horizontal reflects y
+  if (state.mirrorV && x >= HALF) return false;   // Vertical reflects x
   return true;
 }
 
@@ -631,42 +631,27 @@ function fillHollowRect(c0, c1, type) {
   return changed;
 }
 
-// Re-impose symmetry using the canonical region as the single source of truth.
-// Used on LOAD, where the stored half is the canonical (low) half.
-function resymmetrize() {
-  const seen = new Set();
-  const next = [];
-  for (const t of placedTiles) {
-    if (!inCanonical(t.x, t.y)) continue;            // canonical side wins
-    for (const p of orbit(t.x, t.y)) {
-      const k = keyOf(p.x, p.y);
-      if (!seen.has(k)) { seen.add(k); next.push({ x: p.x, y: p.y, type: t.type }); }
-    }
-  }
-  placedTiles = next;
-  rebuildDerived();
-}
-
 // When a mirror is ENABLED we copy whichever half currently has more walls onto
-// the other half. The low side of an axis is x<128 (LEFT) / y<128 (BOTTOM);
-// the high side is RIGHT / TOP (y is up: 255 = top, 0 = bottom). mirrorPlan
-// inspects the counts without mutating, so we can warn the user first.
+// the other half. Horizontal works on the y axis (bottom/top halves); Vertical
+// works on the x axis (left/right halves). The low side is x<128 (LEFT) or
+// y<128 (BOTTOM); high side is RIGHT / TOP (y is up: 255 = top). mirrorPlan
+// inspects counts without mutating, so we can warn the user first.
 function mirrorPlan(axis) {
   const isH = axis === 'H';
-  const coordOf = t => (isH ? t.x : t.y);
+  const coordOf = t => (isH ? t.y : t.x);   // Horizontal -> y (top/bottom); Vertical -> x (left/right)
   let lo = 0, hi = 0;
   for (const t of placedTiles) { const c = coordOf(t); if (c < HALF) lo++; else if (c >= HALF) hi++; }
   const sourceLow = lo >= hi;               // denser half is the source; a tie keeps the low side
   const desc = isH
-    ? (sourceLow ? 'left half → right half' : 'right half → left half')
-    : (sourceLow ? 'bottom half → top half' : 'top half → bottom half');
+    ? (sourceLow ? 'bottom half → top half' : 'top half → bottom half')
+    : (sourceLow ? 'left half → right half' : 'right half → left half');
   return { desc, sourceLow, lo, hi };
 }
 // Rebuild the map from the chosen source half, reflecting across the active mirrors.
 function applyMirror(axis, sourceLow) {
   const isH = axis === 'H';
-  const coordOf = t => (isH ? t.x : t.y);
-  const refl = isH ? reflX : reflY;
+  const coordOf = t => (isH ? t.y : t.x);   // Horizontal -> y; Vertical -> x
+  const refl = isH ? reflY : reflX;
   const seen = new Set();
   const next = [];
   for (const t of placedTiles) {
@@ -843,12 +828,12 @@ function buildBankXML() {
   }
   xml += `    </Section>\n`;
   // Mirror state. The game stores this as "Disabled Mirror": flag 0 = NOT
-  // disabled = mirror ON, flag 1 = disabled = mirror OFF. (Versus is an editor
-  // extension and uses a plain flag: 1 = on.)
+  // disabled = mirror ON, flag 1 = disabled = mirror OFF. Versus is not written
+  // as its own flag — it forces horizontal mirror on, so the Horizontal flag (0)
+  // already captures it and the save is just a horizontally-mirrored map.
   xml += `    <Section name="Disabled Mirror">\n` +
          `        <Key name="Horizontal">\n            <Value flag="${state.mirrorH ? 0 : 1}"/>\n        </Key>\n` +
          `        <Key name="Vertical">\n            <Value flag="${state.mirrorV ? 0 : 1}"/>\n        </Key>\n` +
-         `        <Key name="Versus">\n            <Value flag="${state.versus ? 1 : 0}"/>\n        </Key>\n` +
          `    </Section>\n`;
   xml += `</Bank>\n`;
   return xml;
@@ -948,26 +933,22 @@ function loadBankXML(text) {
   const sections = Array.from(doc.getElementsByTagName('Section'));
   const sectionByName = name => sections.find(s => (s.getAttribute('name') || '') === name);
 
-  // Mirror flags. The game's "Disabled Mirror" section is inverted (flag 0 =
-  // mirror ON). A legacy "Mirror" section uses flag 1 = ON. (Versus: plain flag.)
-  let mh = false, mv = false, vs = false;
+  // Mirror flags from the "Disabled Mirror" section: flag 0 = mirror ON.
+  let mh = false, mv = false;
   const mirrorSec = sections.find(s => /mirror/i.test(s.getAttribute('name') || ''));
   if (mirrorSec) {
-    const inverted = /disabled/i.test(mirrorSec.getAttribute('name') || '');
-    const isOn = flag => inverted ? flag === '0' : flag === '1';
     for (const key of mirrorSec.getElementsByTagName('Key')) {
       const n = (key.getAttribute('name') || '').toLowerCase();
       const v = key.getElementsByTagName('Value')[0];
       const flag = v && v.getAttribute('flag');
-      if (n === 'horizontal') mh = isOn(flag);
-      if (n === 'vertical')   mv = isOn(flag);
-      if (n === 'versus')     vs = flag === '1';   // versus is a plain (non-disabled) flag
+      if (n === 'horizontal') mh = flag === '0';
+      else if (n === 'vertical') mv = flag === '0';
     }
   }
 
-  // Canonical tiles, one section per type. The stored point is the game-frame
-  // coordinate; subtract the corner offset to get the editor's bottom-left anchor.
-  const canon = [];
+  // Parse EVERY stored wall (all type sections). The stored point is the game
+  // corner; subtract the offset to get the editor's bottom-left anchor.
+  const loaded = [];
   for (const type of TILE_TYPES) {
     const sec = sectionByName(type);
     if (!sec) continue;
@@ -980,34 +961,31 @@ function loadBankXML(text) {
       if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
       const x = px - PT_DX, y = py - PT_DY;
       if (!inBoundsAnchor(x, y)) continue;
-      canon.push({ x, y, type });
+      loaded.push({ x, y, type });
     }
   }
 
-  // Reset and reconstruct the full map from the canonical region.
+  // Reset, then FORCE-LOAD every stored wall plus its mirror reflections. No
+  // canonical filtering and no prune, so no saved wall is ever cleared.
   commitHistory(snapshot());   // loading is undoable -> back to the pre-load map
   placedTiles = [];
   tileAt.clear();
   occ.fill(0);
-  state.versus = vs;
-  state.mirrorH = vs ? true : mh;   // versus forces horizontal mirror
+  state.versus = false;        // versus is not stored; it loads as a mirrored standard map
+  state.mirrorH = mh;
   state.mirrorV = mv;
-  rebuildPlayable();                // playable mask + reflX axis depend on the mode
-  let skipped = 0;
-  for (const t of canon) {
-    if (tileAt.has(keyOf(t.x, t.y))) { skipped++; continue; }
-    if (!canOccupy(t.x, t.y)) { skipped++; continue; }  // defensive: ignore overlaps in a bad file
-    addTile(t.x, t.y, t.type);
+  rebuildPlayable();
+  for (const t of loaded) {
+    for (const p of orbit(t.x, t.y)) {            // the wall + its reflections under the loaded flags
+      if (!tileAt.has(keyOf(p.x, p.y))) addTile(p.x, p.y, t.type);
+    }
   }
-  resymmetrize();      // expand canonical -> full using the loaded mirror flags
-  pruneUnbuildable();  // drop anything outside the loaded mode's playable area
   syncControls();
   recomputeValidity();
   fitView();
   requestRender();
   updateMeta();
-  toast(`Loaded ${placedTiles.length} tiles` + (skipped ? ` (${skipped} skipped)` : ''),
-        skipped ? 'bad' : 'ok');
+  toast(`Loaded ${placedTiles.length} walls`, 'ok');
 }
 
 /* ===========================================================================
@@ -1199,11 +1177,13 @@ function drawAxes() {
   const vTop = worldToScreen(HALF, GRID), vBot = worldToScreen(HALF, 0);
   const hLeft = worldToScreen(0, HALF), hRight = worldToScreen(GRID, HALF);
   ctx.lineWidth = 1.5;
-  ctx.setLineDash(state.mirrorH ? [7, 5] : []);
-  ctx.strokeStyle = state.mirrorH ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.22)';
-  ctx.beginPath(); ctx.moveTo(vTop.x, vTop.y); ctx.lineTo(vBot.x, vBot.y); ctx.stroke();
+  // vertical centre line = the Vertical mirror's axis (left<->right)
   ctx.setLineDash(state.mirrorV ? [7, 5] : []);
   ctx.strokeStyle = state.mirrorV ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.22)';
+  ctx.beginPath(); ctx.moveTo(vTop.x, vTop.y); ctx.lineTo(vBot.x, vBot.y); ctx.stroke();
+  // horizontal centre line = the Horizontal mirror's axis (top<->bottom)
+  ctx.setLineDash(state.mirrorH ? [7, 5] : []);
+  ctx.strokeStyle = state.mirrorH ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.22)';
   ctx.beginPath(); ctx.moveTo(hLeft.x, hLeft.y); ctx.lineTo(hRight.x, hRight.y); ctx.stroke();
   ctx.setLineDash([]);
 }
@@ -1535,7 +1515,7 @@ function setTool(tool) {
 }
 
 function onMirrorToggle(which, enabled) {
-  if (which === 'H' && state.versus) { syncControls(); return; }  // H is locked on in versus
+  if (which === 'V' && state.versus) { syncControls(); return; }  // Vertical (left<->right) is locked on in versus
   if (enabled) {
     const plan = mirrorPlan(which);
     const axisName = which === 'H' ? 'Horizontal' : 'Vertical';
@@ -1558,14 +1538,15 @@ function onMirrorToggle(which, enabled) {
   requestRender();
 }
 
-// Versus: force horizontal mirror on, restrict to the versus playable area.
+// Versus: the two lanes are left<->right mirrors, so force the VERTICAL mirror
+// (flip over the vertical axis) on, and restrict to the versus playable area.
 function onVersusToggle(enabled) {
   commitHistory(snapshot());
   state.versus = enabled;
-  if (enabled) state.mirrorH = true;        // forced on; also flips reflX to the versus axis
+  if (enabled) state.mirrorV = true;        // forced on; left<->right lane mirror (versus axis)
   rebuildPlayable();                        // playable mask depends on the mode
   pruneUnbuildable();                       // drop tiles now outside the playable area
-  if (enabled && state.mirrorH) applyMirror('H', mirrorPlan('H').sourceLow);  // denser lane wins
+  if (enabled && state.mirrorV) applyMirror('V', mirrorPlan('V').sourceLow);  // denser lane wins
   syncControls();
   recomputeValidity();
   updateMeta();
@@ -1573,10 +1554,10 @@ function onVersusToggle(enabled) {
 }
 
 function syncControls() {                   // reflect state -> UI (after load / mode change)
-  const h = document.getElementById('mirrorH');
-  h.checked = state.mirrorH;
-  h.disabled = state.versus;                // can't turn H off while in versus mode
-  document.getElementById('mirrorV').checked = state.mirrorV;
+  document.getElementById('mirrorH').checked = state.mirrorH;
+  const v = document.getElementById('mirrorV');
+  v.checked = state.mirrorV;
+  v.disabled = state.versus;                // Vertical (left<->right) is locked on in versus
   const m = document.getElementById('mode');
   if (m) m.value = state.versus ? 'versus' : 'standard';
 }
@@ -1588,8 +1569,8 @@ function updateMeta() {
   let region;
   if (state.versus) region = 'versus · left lane';
   else if (state.mirrorH && state.mirrorV) region = 'bottom-left quadrant';
-  else if (state.mirrorH) region = 'left half';
-  else if (state.mirrorV) region = 'bottom half';
+  else if (state.mirrorH) region = 'bottom half';   // Horizontal reflects y (top/bottom)
+  else if (state.mirrorV) region = 'left half';     // Vertical reflects x (left/right)
   else region = 'full map';
   document.getElementById('storedRegion').textContent = region;
   const fn = document.getElementById('fileNameHint');
