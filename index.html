@@ -236,6 +236,9 @@
         <option value="standard">Standard</option>
         <option value="versus">Versus</option>
         <option value="duos">Duos Versus</option>
+        <option value="quick">Quick</option>
+        <option value="attrition">Attrition</option>
+        <option value="horde">Horde</option>
       </select>
     </div>
 
@@ -355,14 +358,23 @@ const NORMAL_AREA  = { x0: BORDER, y0: BORDER, x1: GRID - 1 - BORDER, y1: GRID -
 const VERSUS_AREA  = { x0: 2,   y0: 34, x1: 253, y1: 221 };   // top-right corner = 253,221
 const VERSUS_BLACK = { x0: 116, y0: 34, x1: 139, y1: 221 };   // central divider (x to 139, symmetric about 127.5); top lowered
 const DUOS_BLACK_H = { x0: 2,   y0: 114, x1: 253, y1: 141 };  // duos: horizontal divider spans the playable width
+const QUICK_AREA   = { x0: 76,  y0: 92, x1: 179, y1: 253 };   // quick mode playable rectangle
+const ATTRITION_AREA  = { x0: 140, y0: 34,  x1: 253, y1: 221 };  // attrition playable rectangle
+const ATTRITION_BLACK = { x0: 140, y0: 114, x1: 253, y1: 141 };  // attrition horizontal divider (top/bottom halves)
+const HORDE_AREA   = { x0: 76,  y0: 88, x1: 179, y1: 167 };  // horde playable (walkable); inner 2-cell ring is no-build
 
-// Game modes. forceH/forceV are mirrors locked on; allowSpawner gates the 1x1
-// spawner; psDefault is the canonical Player-Spawner anchor (centre of the
-// playable region). Versus/Duos share the versus playable area + 255 mirror axis.
+// Game modes. forceH/forceV = mirrors locked on; allowSpawner gates the 1x1
+// spawner; psDefault is the canonical Player-Spawner anchor; area = playable
+// (walkable) rectangle; bars = extra unplayable rectangles; corners = carve the
+// 32x32 map corners (standard only); dim = shade out-of-play margins; buildMargin
+// = a no-build ring (cells) inside the playable area (walkable but not buildable).
 const MODES = {
-  standard: { label: 'Standard',     forceH: false, forceV: false, allowSpawner: true,  psDefault: { x: 126, y: 126 } },
-  versus:   { label: 'Versus',       forceH: false, forceV: true,  allowSpawner: false, psDefault: { x: 56,  y: 126 } },
-  duos:     { label: 'Duos Versus',  forceH: true,  forceV: true,  allowSpawner: false, psDefault: { x: 56,  y: 71  } },
+  standard: { label: 'Standard',    forceH: false, forceV: false, allowSpawner: true,  psDefault: { x: 126, y: 126 }, area: NORMAL_AREA, bars: [],                          corners: true,  dim: false, buildMargin: 0 },
+  versus:   { label: 'Versus',      forceH: false, forceV: true,  allowSpawner: false, psDefault: { x: 56,  y: 126 }, area: VERSUS_AREA, bars: [VERSUS_BLACK],               corners: false, dim: true,  buildMargin: 0 },
+  duos:     { label: 'Duos Versus', forceH: true,  forceV: true,  allowSpawner: false, psDefault: { x: 56,  y: 71  }, area: VERSUS_AREA, bars: [VERSUS_BLACK, DUOS_BLACK_H], corners: false, dim: true,  buildMargin: 0 },
+  quick:    { label: 'Quick',       forceH: false, forceV: false, noH: true,  allowSpawner: true,  psDefault: { x: 126, y: 126 }, area: QUICK_AREA,  bars: [],                          corners: false, dim: true,  buildMargin: 0 },  // 4x4 anchor 126 -> centred on 128,128; H mirror disabled
+  attrition:{ label: 'Attrition',   forceH: true,  forceV: false, noV: true,  allowSpawner: false, psDefault: { x: 195, y: 72  }, area: ATTRITION_AREA, bars: [ATTRITION_BLACK],        corners: false, dim: true,  buildMargin: 0 },  // forced H mirror, V disabled; 4x4 centred in the bottom half, mirrored to the top
+  horde:    { label: 'Horde',       forceH: false, forceV: false, allowSpawner: false, psDefault: { x: 126, y: 126 }, area: HORDE_AREA,  bars: [],                          corners: false, dim: true,  buildMargin: 2 },  // 2-cell no-build ring; player spawn centred on 128,128
 };
 
 // Spawner objects.
@@ -413,7 +425,8 @@ const occ = new Uint8Array(GRID * GRID);    // physical coverage bitmap: 1 = cel
 const redOccBuf = new Uint8Array(GRID * GRID);
 const blueOccBuf = new Uint8Array(GRID * GRID);
 // Playable-area mask + lane (chamber) labels, rebuilt whenever the mode changes.
-const playableBuf = new Uint8Array(GRID * GRID);  // 1 = buildable / playable cell
+const playableBuf = new Uint8Array(GRID * GRID);  // 1 = playable (walkable for pathing)
+const buildableBuf = new Uint8Array(GRID * GRID); // 1 = wall/spawner may be placed (playable minus no-build ring)
 const chamberBuf = new Int32Array(GRID * GRID);   // 0 = non-playable, >=1 = lane id
 let numChambers = 0;
 const chamberSeed = [];                           // lane id -> a representative cell index
@@ -550,6 +563,9 @@ const reflAnchorX = (x, size) => (GRID) - size - x;
 const reflAnchorY = (y, size) => (GRID) - size - y;
 const forcedH = () => MODES[state.gameMode].forceH;
 const forcedV = () => MODES[state.gameMode].forceV;
+// A mirror is "locked" (toggle disabled) when the mode forces it on OR forbids it.
+const mirrorLockedH = () => forcedH() || !!MODES[state.gameMode].noH;
+const mirrorLockedV = () => forcedV() || !!MODES[state.gameMode].noV;
 
 // All distinct positions an edit touches under the active mirrors (1, 2 or 4).
 // Horizontal mirror flips top<->bottom (reflY); Vertical mirror flips left<->right (reflX).
@@ -628,12 +644,13 @@ function canOccupy(ax, ay) {
   }
   return true;
 }
-// Are all four footprint cells inside the current mode's playable area?
+// Are all four footprint cells buildable (inside the playable area and outside
+// any no-build margin)?
 function footprintBuildable(ax, ay) {
-  return playableBuf[ay * GRID + ax] === 1 &&
-         playableBuf[ay * GRID + (ax + 1)] === 1 &&
-         playableBuf[(ay + 1) * GRID + ax] === 1 &&
-         playableBuf[(ay + 1) * GRID + (ax + 1)] === 1;
+  return buildableBuf[ay * GRID + ax] === 1 &&
+         buildableBuf[ay * GRID + (ax + 1)] === 1 &&
+         buildableBuf[(ay + 1) * GRID + ax] === 1 &&
+         buildableBuf[(ay + 1) * GRID + (ax + 1)] === 1;
 }
 // Drop any tiles that are no longer buildable (e.g. after switching mode).
 function pruneUnbuildable() {
@@ -660,7 +677,7 @@ function objectFits(ax, ay, size, ignorePlayer) {
   if (ax < 0 || ay < 0 || ax > GRID - size || ay > GRID - size) return false;
   for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
     const cx = ax + dx, cy = ay + dy;
-    if (playableBuf[cy * GRID + cx] !== 1) return false;
+    if (buildableBuf[cy * GRID + cx] !== 1) return false;
     if (occ[cy * GRID + cx]) return false;
     if (spawners.some(s => s.x === cx && s.y === cy)) return false;
     if (!ignorePlayer && playerSpawnerCovers(cx, cy)) return false;
@@ -875,20 +892,28 @@ function carveRect(x0, y0, x1, y1) {        // mark a cell rectangle unbuildable
 // Rebuild the playable bitmap for the current mode, then label its chambers.
 function rebuildPlayable() {
   playableBuf.fill(0);
-  const a = state.versus ? VERSUS_AREA : NORMAL_AREA;
+  const cfg = MODES[state.gameMode];
+  const a = cfg.area;
   for (let cy = a.y0; cy <= a.y1; cy++)
     for (let cx = a.x0; cx <= a.x1; cx++)
       playableBuf[cy * GRID + cx] = 1;
-  if (state.versus) {                       // versus & duos: central vertical divider
-    carveRect(VERSUS_BLACK.x0, VERSUS_BLACK.y0, VERSUS_BLACK.x1, VERSUS_BLACK.y1);
-    if (state.gameMode === 'duos')          // duos: extra horizontal divider -> four lanes
-      carveRect(DUOS_BLACK_H.x0, DUOS_BLACK_H.y0, DUOS_BLACK_H.x1, DUOS_BLACK_H.y1);
-  } else {                                  // standard: four 32x32 unbuildable corners
+  for (const bar of cfg.bars) carveRect(bar.x0, bar.y0, bar.x1, bar.y1);   // central dividers
+  if (cfg.corners) {                        // standard: four 32x32 unbuildable corners
     const C = CORNER;
     carveRect(0, 0, C - 1, C - 1);                       // bottom-left
     carveRect(GRID - C, 0, GRID - 1, C - 1);             // bottom-right
     carveRect(0, GRID - C, C - 1, GRID - 1);             // top-left
     carveRect(GRID - C, GRID - C, GRID - 1, GRID - 1);   // top-right
+  }
+  // buildable = playable minus the no-build ring (margin cells inside the area).
+  const m = cfg.buildMargin || 0;
+  buildableBuf.fill(0);
+  if (m === 0) {
+    buildableBuf.set(playableBuf);
+  } else {
+    for (let cy = a.y0 + m; cy <= a.y1 - m; cy++)
+      for (let cx = a.x0 + m; cx <= a.x1 - m; cx++)
+        if (playableBuf[cy * GRID + cx]) buildableBuf[cy * GRID + cx] = 1;
   }
   labelChambers();
   mapCacheDirty = true;
@@ -1169,7 +1194,7 @@ function buildBankXML() {
 }
 
 // Filename helpers — e.g. CustomCuteDefenseMapVersus2.
-function modeName() { return state.gameMode === 'duos' ? 'DuosVersus' : state.gameMode === 'versus' ? 'Versus' : 'Standard'; }
+function modeName() { return MODES[state.gameMode].label.replace(/\s+/g, ''); }  // e.g. 'Duos Versus' -> 'DuosVersus'
 function mapBaseName() { return `CustomCuteDefenseMap${modeName()}${state.slot}`; }
 
 function downloadFile(filename, text, mime) {
@@ -1613,8 +1638,8 @@ function drawBorder() {
   ctx.lineWidth = 2;
   ctx.strokeStyle = 'rgba(0,0,0,0.65)';
   ctx.strokeRect(r.x, r.y, r.w, r.h);
-  // outline the playable area when it is smaller than the full map (Versus)
-  const a = state.versus ? VERSUS_AREA : NORMAL_AREA;
+  // outline the playable area when the mode restricts it (versus/duos/quick)
+  const a = MODES[state.gameMode].area;
   const pr = worldRectToScreen(a.x0, a.y0, a.x1 + 1, a.y1 + 1);
   ctx.lineWidth = 1.5;
   ctx.strokeStyle = 'rgba(255,255,255,0.45)';
@@ -1625,21 +1650,29 @@ function fillWorldRect(wx0, wy0, wx1, wy1) {
   const r = worldRectToScreen(wx0, wy0, wx1, wy1);
   ctx.fillRect(r.x, r.y, r.w, r.h);
 }
-// Versus only: dim the out-of-play margins and paint the central black divider.
-// Standard mode is NOT dimmed (the border/corners are simply not buildable).
+// Restricted modes (dim=true): shade the out-of-play margins and paint dividers.
+// Standard is NOT dimmed (the border/corners are simply not buildable).
 function drawUnbuildable() {
-  if (!state.versus) return;
-  const a = VERSUS_AREA;
+  const cfg = MODES[state.gameMode];
+  if (!cfg.dim) return;
+  const a = cfg.area;
   const px0 = a.x0, py0 = a.y0, px1 = a.x1 + 1, py1 = a.y1 + 1;  // playable world edges
   ctx.fillStyle = 'rgba(8,9,12,0.70)';
   fillWorldRect(0, 0, GRID, py0);          // bottom margin
   fillWorldRect(0, py1, GRID, GRID);       // top margin
   fillWorldRect(0, py0, px0, py1);         // left margin
   fillWorldRect(px1, py0, GRID, py1);      // right margin
-  const k = VERSUS_BLACK;
   ctx.fillStyle = '#000';
-  fillWorldRect(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID));
-  if (state.gameMode === 'duos') { const d = DUOS_BLACK_H; fillWorldRect(d.x0, d.y0, d.x1 + 1, d.y1 + 1); }
+  for (const k of cfg.bars) fillWorldRect(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID));
+  // no-build ring inside the playable area (walkable, but marked as not buildable)
+  const m = cfg.buildMargin || 0;
+  if (m) {
+    ctx.fillStyle = 'rgba(224,49,49,0.22)';
+    fillWorldRect(a.x0, a.y0, a.x1 + 1, a.y0 + m);                 // bottom ring
+    fillWorldRect(a.x0, a.y1 - m + 1, a.x1 + 1, a.y1 + 1);         // top ring
+    fillWorldRect(a.x0, a.y0 + m, a.x0 + m, a.y1 - m + 1);         // left ring
+    fillWorldRect(a.x1 - m + 1, a.y0 + m, a.x1 + 1, a.y1 - m + 1); // right ring
+  }
 }
 
 // --- Minimap ---------------------------------------------------------------
@@ -1658,15 +1691,22 @@ function renderMapCache() {
   mcFill(0, 0, GRID, GRID, 'rgba(0,0,0,0.45)');  // darken so walls stand out
   // walls in brightened type colours for contrast
   for (const t of placedTiles) mcFill(t.x, t.y, t.x + 2, t.y + 2, shade(TYPE_COLOR[t.type], 0.3));
-  if (state.versus) {                        // dim margins + black divider (standard is not dimmed)
-    const a = VERSUS_AREA, dim = 'rgba(8,9,12,0.72)';
+  const cfg = MODES[state.gameMode];
+  if (cfg.dim) {                             // dim margins + dividers (standard is not dimmed)
+    const a = cfg.area, dim = 'rgba(8,9,12,0.72)';
     mcFill(0, 0, GRID, a.y0, dim);
     mcFill(0, a.y1 + 1, GRID, GRID, dim);
     mcFill(0, a.y0, a.x0, a.y1 + 1, dim);
     mcFill(a.x1 + 1, a.y0, GRID, a.y1 + 1, dim);
-    const k = VERSUS_BLACK;
-    mcFill(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID), '#000');
-    if (state.gameMode === 'duos') { const d = DUOS_BLACK_H; mcFill(d.x0, d.y0, d.x1 + 1, d.y1 + 1, '#000'); }
+    for (const k of cfg.bars) mcFill(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID), '#000');
+    const m = cfg.buildMargin || 0;
+    if (m) {
+      const a = cfg.area, nb = 'rgba(224,49,49,0.30)';
+      mcFill(a.x0, a.y0, a.x1 + 1, a.y0 + m, nb);
+      mcFill(a.x0, a.y1 - m + 1, a.x1 + 1, a.y1 + 1, nb);
+      mcFill(a.x0, a.y0 + m, a.x0 + m, a.y1 - m + 1, nb);
+      mcFill(a.x1 - m + 1, a.y0 + m, a.x1 + 1, a.y1 - m + 1, nb);
+    }
   }
   // spawners on top
   for (const ps of playerSpawners) mcFill(ps.x, ps.y, ps.x + PS_SIZE, ps.y + PS_SIZE, PS_COLOR);
@@ -1975,7 +2015,7 @@ function setTool(tool) {
 }
 
 function onMirrorToggle(which, enabled) {
-  if ((which === 'H' && forcedH()) || (which === 'V' && forcedV())) { syncControls(); return; }  // forced mirror locked
+  if ((which === 'H' && mirrorLockedH()) || (which === 'V' && mirrorLockedV())) { syncControls(); return; }  // forced on / disabled
   if (enabled) {
     const plan = mirrorPlan(which);
     const axisName = which === 'H' ? 'Horizontal' : 'Vertical';
@@ -2009,6 +2049,8 @@ function setMode(name) {
   state.versus = name !== 'standard';
   if (cfg.forceH) state.mirrorH = true;
   if (cfg.forceV) state.mirrorV = true;
+  if (cfg.noH) state.mirrorH = false;       // mode forbids horizontal mirror
+  if (cfg.noV) state.mirrorV = false;       // mode forbids vertical mirror
   rebuildPlayable();
   pruneUnbuildable();
   if (state.mirrorH || state.mirrorV) resymmetrizeAll();
@@ -2023,7 +2065,7 @@ function setMode(name) {
 function syncControls() {                   // reflect state -> UI (after load / mode change)
   const h = document.getElementById('mirrorH'), v = document.getElementById('mirrorV');
   h.checked = state.mirrorH; v.checked = state.mirrorV;
-  h.disabled = forcedH(); v.disabled = forcedV();   // forced mirrors can't be toggled off
+  h.disabled = mirrorLockedH(); v.disabled = mirrorLockedV();   // locked: forced on or disabled by the mode
   const m = document.getElementById('mode');
   if (m) m.value = state.gameMode;
   buildPalette();                           // refresh disabled state of the Spawner swatch
@@ -2036,6 +2078,9 @@ function updateMeta() {
   let region;
   if (state.gameMode === 'duos') region = 'duos · 1 quadrant lane';
   else if (state.gameMode === 'versus') region = 'versus · left lane';
+  else if (state.gameMode === 'quick') region = 'quick zone';
+  else if (state.gameMode === 'attrition') region = 'attrition · bottom half';
+  else if (state.gameMode === 'horde') region = 'horde zone';
   else if (state.mirrorH && state.mirrorV) region = 'bottom-left quadrant';
   else if (state.mirrorH) region = 'bottom half';   // Horizontal reflects y (top/bottom)
   else if (state.mirrorV) region = 'left half';     // Vertical reflects x (left/right)
