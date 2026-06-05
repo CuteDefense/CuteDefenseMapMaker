@@ -20,11 +20,9 @@
     7. Input handling
     8. UI wiring & init
 
-  Grid: 256x256 cells. (0,0) is the TOP-LEFT corner; x increases right, y
-  increases DOWN — matching the SC2 bank coordinate system.
-  Every tile is a 2x2 footprint anchored at its TOP-LEFT cell (x,y), covering
-  (x,y),(x+1,y),(x,y+1),(x+1,y+1) (extending right and down). No rotation, no
-  overlap, no out-of-bounds.
+  Grid: 256x256 cells. (0,0) is bottom-left, (255,255) is top-right.
+  Every tile is a 2x2 footprint anchored at its bottom-left cell (x,y), covering
+  (x,y),(x+1,y),(x,y+1),(x+1,y+1). No rotation, no overlap, no out-of-bounds.
 -->
 <style>
   :root {
@@ -117,6 +115,17 @@
     background: var(--panel-2); color: var(--text); font: inherit; cursor: pointer;
   }
   .select:focus { outline: none; border-color: var(--accent); }
+  .slotrow { display: flex; align-items: center; gap: 8px; }
+  .slotlbl { color: var(--muted); font-size: 11px; flex: 0 0 auto; }
+  .slotsel { flex: 1 1 auto; }
+  #fileNameHint { font-family: monospace; font-size: 10px; color: var(--muted); word-break: break-all; }
+
+  /* tiny, easy-to-miss dev export handle */
+  .tinyexport {
+    display: inline-block; margin: 2px 0 0 2px; font-size: 9px; line-height: 1;
+    color: var(--muted); opacity: .18; cursor: pointer; user-select: none;
+  }
+  .tinyexport:hover { opacity: .9; }
 
   .status {
     display: flex; align-items: center; gap: 8px; padding: 9px 10px;
@@ -202,6 +211,7 @@
         <label for="mirrorV">Vertical (top &harr; bottom)</label>
         <label class="switch"><input type="checkbox" id="mirrorV"><span class="slider"></span></label>
       </div>
+      <div class="hint">Enabling a mirror copies whichever half has more walls onto the other half. You'll get a prompt telling you which way before it changes anything.</div>
     </div>
 
     <div class="group">
@@ -212,6 +222,14 @@
         <button class="btn" id="undoBtn" disabled>Undo</button>
         <button class="btn" id="redoBtn" disabled>Redo</button>
       </div>
+      <div class="slotrow">
+        <span class="slotlbl">Save slot</span>
+        <select id="slot" class="select slotsel">
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+          <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+        </select>
+      </div>
+      <div class="hint" id="fileNameHint">CustomCuteDefenseMapStandard1.SC2Bank</div>
       <div class="row">
         <button class="btn primary" id="saveBtn">Save .SC2Bank</button>
         <button class="btn" id="loadBtn">Load</button>
@@ -255,6 +273,9 @@
         <a href="https://www.patreon.com/Amethyslime" target="_blank" rel="noopener noreferrer">Patreon &middot; Amethyslime</a>
       </div>
     </div>
+
+    <!-- tiny hidden dev export: writes the Galaxy LoadXXXXXMap() script as .txt (also Ctrl+Shift+E) -->
+    <span id="galaxyExport" class="tinyexport" title="Export Galaxy script (.txt)">·</span>
   </aside>
 
   <!-- ============================= CANVAS STAGE ============================= -->
@@ -323,6 +344,7 @@ const state = {
   versus: false,           // versus mode: forced H-mirror + restricted playable area
   showGrid: true,
   showMinimap: true,
+  slot: 1,                 // save-slot number used in the export filenames
 
   // camera: (camX,camY) is the world point centred in the viewport
   scale: 4,
@@ -364,26 +386,25 @@ const keyOf = (x, y) => x + ',' + y;
 
 /* ===========================================================================
  * 2. COORDINATE / CAMERA MATH
- * Top-left origin: world y increases downward, the same direction as screen y,
- * so no axis flip is needed on conversion.
+ * World y points up; screen y points down, so y is flipped on conversion.
  * ======================================================================== */
 
 function worldToScreen(wx, wy) {
   return {
     x: (wx - state.camX) * state.scale + viewW / 2,
-    y: (wy - state.camY) * state.scale + viewH / 2,
+    y: viewH / 2 - (wy - state.camY) * state.scale,
   };
 }
 function screenToWorld(sx, sy) {
   return {
     x: (sx - viewW / 2) / state.scale + state.camX,
-    y: (sy - viewH / 2) / state.scale + state.camY,
+    y: (viewH / 2 - sy) / state.scale + state.camY,
   };
 }
 // Screen rectangle covering the world box [wx0,wy0]-[wx1,wy1].
 function worldRectToScreen(wx0, wy0, wx1, wy1) {
-  const tl = worldToScreen(wx0, wy0);  // y-down: smaller world-y is the top
-  const br = worldToScreen(wx1, wy1);
+  const tl = worldToScreen(wx0, wy1);  // higher world-y -> top of screen
+  const br = worldToScreen(wx1, wy0);
   return { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y };
 }
 function cellUnderScreen(sx, sy) {
@@ -414,11 +435,11 @@ function fitView() {
 const inBoundsAnchor = (x, y) => x >= 0 && y >= 0 && x <= MAX_ANCHOR && y <= MAX_ANCHOR;
 const footprint = (x, y) => [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]];
 
-// Reflection of a 2x2 ANCHOR (its top-left cell). Normal mode mirrors about the
-// map centre line (127.5): reflecting both cells of a footprint (c' = 255 - c)
-// and taking the new top-left gives anchor' = 254 - x. Versus mode is symmetric
-// about cell 128 (the centre of the playable area and black bar), so
-// anchor' = 255 - x — this keeps mirrored tiles landing inside the opposite lane.
+// Reflection of a 2x2 ANCHOR. Normal mode mirrors about the map centre line
+// (x = 127.5): reflecting both cells of a footprint (c' = 255 - c) and taking
+// the new bottom-left gives anchor' = 254 - x. Versus mode is symmetric about
+// cell 128 (the centre of the playable area and black bar), so anchor' = 255 - x
+// — this keeps mirrored tiles landing inside the opposite lane.
 const reflX = x => (state.versus ? GRID - 1 : GRID - 2) - x;
 const reflY = y => (state.versus ? GRID - 1 : GRID - 2) - y;
 
@@ -433,8 +454,8 @@ function orbit(x, y) {
 }
 
 // Canonical = the minimal unique region that is SAVED. Horizontal -> left half
-// (x <= 127); vertical -> TOP half (y <= 127, since y is top-down); both ->
-// top-left quadrant. The other side(s) are reconstructed by reflection on load.
+// (x <= 127), vertical -> bottom half (y <= 127), both -> bottom-left quadrant.
+// The other side(s) are reconstructed by reflection on load.
 function inCanonical(x, y) {
   if (state.mirrorH && x >= HALF) return false;
   if (state.mirrorV && y >= HALF) return false;
@@ -565,12 +586,47 @@ function fillHollowRect(c0, c1, type) {
 }
 
 // Re-impose symmetry using the canonical region as the single source of truth.
-// Called when a mirror is switched on and after loading a mirrored map.
+// Used on LOAD, where the stored half is the canonical (low) half.
 function resymmetrize() {
   const seen = new Set();
   const next = [];
   for (const t of placedTiles) {
     if (!inCanonical(t.x, t.y)) continue;            // canonical side wins
+    for (const p of orbit(t.x, t.y)) {
+      const k = keyOf(p.x, p.y);
+      if (!seen.has(k)) { seen.add(k); next.push({ x: p.x, y: p.y, type: t.type }); }
+    }
+  }
+  placedTiles = next;
+  rebuildDerived();
+}
+
+// When a mirror is ENABLED we copy whichever half currently has more walls onto
+// the other half. The low side of an axis is x<128 (LEFT) / y<128 (BOTTOM);
+// the high side is RIGHT / TOP (y is up: 255 = top, 0 = bottom). mirrorPlan
+// inspects the counts without mutating, so we can warn the user first.
+function mirrorPlan(axis) {
+  const isH = axis === 'H';
+  const coordOf = t => (isH ? t.x : t.y);
+  let lo = 0, hi = 0;
+  for (const t of placedTiles) { const c = coordOf(t); if (c < HALF) lo++; else if (c >= HALF) hi++; }
+  const sourceLow = lo >= hi;               // denser half is the source; a tie keeps the low side
+  const desc = isH
+    ? (sourceLow ? 'left half → right half' : 'right half → left half')
+    : (sourceLow ? 'bottom half → top half' : 'top half → bottom half');
+  return { desc, sourceLow, lo, hi };
+}
+// Rebuild the map from the chosen source half, reflecting across the active mirrors.
+function applyMirror(axis, sourceLow) {
+  const isH = axis === 'H';
+  const coordOf = t => (isH ? t.x : t.y);
+  const refl = isH ? reflX : reflY;
+  const seen = new Set();
+  const next = [];
+  for (const t of placedTiles) {
+    const c = coordOf(t);
+    const inSource = (refl(c) === c) || (sourceLow ? c < HALF : c >= HALF);  // keep on-axis tiles too
+    if (!inSource) continue;
     for (const p of orbit(t.x, t.y)) {
       const k = keyOf(p.x, p.y);
       if (!seen.has(k)) { seen.add(k); next.push({ x: p.x, y: p.y, type: t.type }); }
@@ -741,22 +797,58 @@ function buildBankXML() {
   return xml;
 }
 
+// Filename helpers — e.g. CustomCuteDefenseMapVersus2.
+function modeName() { return state.versus ? 'Versus' : 'Standard'; }
+function mapBaseName() { return `CustomCuteDefenseMap${modeName()}${state.slot}`; }
+
+function downloadFile(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 function saveMap() {
   recomputeValidity();
   if (!state.valid) {
     toast('Cannot save: the open area is not one connected region.', 'bad');
     return;
   }
-  const blob = new Blob([buildBankXML()], { type: 'text/xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'CuteDefense.SC2Bank';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
-  toast('Saved CuteDefense.SC2Bank', 'ok');
+  const name = mapBaseName() + '.SC2Bank';
+  downloadFile(name, buildBankXML(), 'text/xml');
+  toast('Saved ' + name, 'ok');
+}
+
+// Hidden dev export: a Galaxy .txt the game loads directly. Only the canonical
+// (unique) tiles are emitted — the game's generate functions take the map's
+// horizontal/vertical mirror booleans and spawn the reflected copies themselves.
+//   gf_InitializationMapGenerateWall(x, y, isFlower, mirrorH, mirrorV)
+//     isFlower=false -> wall (TallShrubs); isFlower=true -> non-coloured (yellow) Flowers
+//   gf_InitializationMapGenerateColoredWall(x, y, isBlueFlower, mirrorH, mirrorV)
+//     isBlueFlower=false -> RedFlowers; true -> BlueFlowers
+function buildGalaxyText() {
+  const H = state.mirrorH ? 'true' : 'false';
+  const V = state.mirrorV ? 'true' : 'false';
+  let out = `void Load${modeName()}${state.slot}Map(){\n`;
+  for (const t of placedTiles) {
+    if (!inCanonical(t.x, t.y)) continue;   // the game regenerates the mirrored copies
+    if (t.type === 'TallShrubs')        out += `\tgf_InitializationMapGenerateWall(${t.x},${t.y},false,${H},${V});\n`;
+    else if (t.type === 'Flowers')      out += `\tgf_InitializationMapGenerateWall(${t.x},${t.y},true,${H},${V});\n`;
+    else if (t.type === 'RedFlowers')   out += `\tgf_InitializationMapGenerateColoredWall(${t.x},${t.y},false,${H},${V});\n`;
+    else if (t.type === 'BlueFlowers')  out += `\tgf_InitializationMapGenerateColoredWall(${t.x},${t.y},true,${H},${V});\n`;
+  }
+  out += `}\n`;
+  return out;
+}
+function exportGalaxy() {
+  const name = mapBaseName() + '.txt';
+  downloadFile(name, buildGalaxyText(), 'text/plain');
+  toast('Exported ' + name, 'ok');
 }
 
 function loadBankXML(text) {
@@ -896,15 +988,15 @@ function render() {
   if (state.showMinimap) drawMinimap();
 }
 
-// Four quadrant background. (0,0) is top-left in world space (y increases down).
+// Four quadrant background. (0,0) is bottom-left in world space.
 function drawBackground() {
   ctx.fillStyle = '#0b0c10';
   ctx.fillRect(0, 0, viewW, viewH);
   const quads = [
-    [0, 0, HALF, HALF, '#caa01f'],      // top-left     -> yellow
-    [HALF, 0, GRID, HALF, '#c22f2f'],   // top-right    -> red
-    [0, HALF, HALF, GRID, '#1763b8'],   // bottom-left  -> blue
-    [HALF, HALF, GRID, GRID, '#268a3e'],// bottom-right -> green
+    [0, 0, HALF, HALF, '#1763b8'],      // bottom-left  -> blue
+    [HALF, 0, GRID, HALF, '#268a3e'],   // bottom-right -> green
+    [0, HALF, HALF, GRID, '#caa01f'],   // top-left     -> yellow
+    [HALF, HALF, GRID, GRID, '#c22f2f'],// top-right     -> red
   ];
   for (const [x0, y0, x1, y1, col] of quads) {
     const r = worldRectToScreen(x0, y0, x1, y1);
@@ -1056,16 +1148,16 @@ function drawUnbuildable() {
 // --- Minimap ---------------------------------------------------------------
 // mapCacheCanvas is a 1px-per-cell image of the whole map, rebuilt only when
 // tiles/mode change. The visible minimap blits it scaled + the viewport box.
-function mcFill(cx0, cy0, cx1, cy1, color) {   // fill a cell-rect on the cache (y-down, same as world)
+function mcFill(cx0, cy0, cx1, cy1, color) {   // fill a cell-rect on the cache (world-y up -> image-y down)
   mapCacheCtx.fillStyle = color;
-  mapCacheCtx.fillRect(cx0, cy0, cx1 - cx0, cy1 - cy0);
+  mapCacheCtx.fillRect(cx0, GRID - cy1, cx1 - cx0, cy1 - cy0);
 }
 function renderMapCache() {
   mapCacheCtx.clearRect(0, 0, GRID, GRID);
-  mcFill(0, 0, HALF, HALF, '#caa01f');       // top-left yellow
-  mcFill(HALF, 0, GRID, HALF, '#c22f2f');    // top-right red
-  mcFill(0, HALF, HALF, GRID, '#1763b8');    // bottom-left blue
-  mcFill(HALF, HALF, GRID, GRID, '#268a3e'); // bottom-right green
+  mcFill(0, 0, HALF, HALF, '#1763b8');       // bottom-left blue
+  mcFill(HALF, 0, GRID, HALF, '#268a3e');    // bottom-right green
+  mcFill(0, HALF, HALF, GRID, '#caa01f');    // top-left yellow
+  mcFill(HALF, HALF, GRID, GRID, '#c22f2f'); // top-right red
   mcFill(0, 0, GRID, GRID, 'rgba(0,0,0,0.18)');
   for (const t of placedTiles) mcFill(t.x, t.y, t.x + 2, t.y + 2, TYPE_COLOR[t.type]);
   const a = state.versus ? VERSUS_AREA : NORMAL_AREA;
@@ -1090,7 +1182,7 @@ function drawMinimap() {
   const wx0 = clamp(Math.min(tl.x, br.x), 0, GRID), wx1 = clamp(Math.max(tl.x, br.x), 0, GRID);
   const wy0 = clamp(Math.min(tl.y, br.y), 0, GRID), wy1 = clamp(Math.max(tl.y, br.y), 0, GRID);
   const rx = wx0 / GRID * MM, rw = (wx1 - wx0) / GRID * MM;
-  const ry = wy0 / GRID * MM, rh = (wy1 - wy0) / GRID * MM;
+  const ry = (GRID - wy1) / GRID * MM, rh = (wy1 - wy0) / GRID * MM;
   mmCtx.lineWidth = 1.5;
   mmCtx.strokeStyle = 'rgba(255,255,255,0.9)';
   mmCtx.strokeRect(rx + 0.75, ry + 0.75, Math.max(2, rw - 1.5), Math.max(2, rh - 1.5));
@@ -1101,7 +1193,7 @@ function minimapJump(e) {
   const fx = clamp((e.clientX - r.left) / r.width, 0, 1);
   const fy = clamp((e.clientY - r.top) / r.height, 0, 1);
   state.camX = fx * GRID;
-  state.camY = fy * GRID;                    // minimap and world both top-down
+  state.camY = (1 - fy) * GRID;             // minimap y is top-down; world y is up
   clampCamera();
   updateReadout();
   requestRender();
@@ -1234,7 +1326,7 @@ function onPointerMove(e) {
     const dx = (p.x - state.panLast.x) / state.scale;
     const dy = (p.y - state.panLast.y) / state.scale;
     state.camX -= dx;
-    state.camY -= dy;                       // y-down: world and screen y move together
+    state.camY += dy;                       // world-y is flipped vs screen-y
     state.panLast = p;
     clampCamera();
     requestRender();
@@ -1294,6 +1386,7 @@ function onKeyDown(e) {
     if (k === 's') { e.preventDefault(); saveMap(); }
     else if (k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if (k === 'y') { e.preventDefault(); redo(); }
+    else if (k === 'e' && e.shiftKey) { e.preventDefault(); exportGalaxy(); }  // hidden Galaxy export
     return;
   }
   switch (e.key.toLowerCase()) {
@@ -1346,10 +1439,23 @@ function setTool(tool) {
 
 function onMirrorToggle(which, enabled) {
   if (which === 'H' && state.versus) { syncControls(); return; }  // H is locked on in versus
-  commitHistory(snapshot());
-  if (which === 'H') state.mirrorH = enabled;
-  else state.mirrorV = enabled;
-  if (enabled) resymmetrize();              // enabling makes the canonical side authoritative
+  if (enabled) {
+    const plan = mirrorPlan(which);
+    const axisName = which === 'H' ? 'Horizontal' : 'Vertical';
+    // Warn (and let them cancel): the denser half overwrites the other.
+    if (placedTiles.length > 0 &&
+        !confirm(`${axisName} mirror will copy the ${plan.desc}.\nThe other half will be overwritten. Continue?`)) {
+      syncControls();                       // cancelled -> revert the switch
+      return;
+    }
+    commitHistory(snapshot());
+    if (which === 'H') state.mirrorH = true; else state.mirrorV = true;
+    applyMirror(which, plan.sourceLow);
+    if (plan.lo + plan.hi > 0) toast(`Mirrored ${plan.desc}`, 'ok');
+  } else {
+    commitHistory(snapshot());
+    if (which === 'H') state.mirrorH = false; else state.mirrorV = false;
+  }
   recomputeValidity();
   updateMeta();
   requestRender();
@@ -1362,7 +1468,7 @@ function onVersusToggle(enabled) {
   if (enabled) state.mirrorH = true;        // forced on; also flips reflX to the versus axis
   rebuildPlayable();                        // playable mask depends on the mode
   pruneUnbuildable();                       // drop tiles now outside the playable area
-  if (enabled && state.mirrorH) resymmetrize();
+  if (enabled && state.mirrorH) applyMirror('H', mirrorPlan('H').sourceLow);  // denser lane wins
   syncControls();
   recomputeValidity();
   updateMeta();
@@ -1384,11 +1490,13 @@ function updateMeta() {
   document.getElementById('zoomPct').textContent = Math.round(state.scale * 100 / 6) + '%';
   let region;
   if (state.versus) region = 'versus · left lane';
-  else if (state.mirrorH && state.mirrorV) region = 'top-left quadrant';
+  else if (state.mirrorH && state.mirrorV) region = 'bottom-left quadrant';
   else if (state.mirrorH) region = 'left half';
-  else if (state.mirrorV) region = 'top half';
+  else if (state.mirrorV) region = 'bottom half';
   else region = 'full map';
   document.getElementById('storedRegion').textContent = region;
+  const fn = document.getElementById('fileNameHint');
+  if (fn) fn.textContent = mapBaseName() + '.SC2Bank';
 }
 function updateReadout() {
   const el = document.getElementById('readout');
@@ -1460,12 +1568,19 @@ function init() {
   document.getElementById('mirrorH').addEventListener('change', e => onMirrorToggle('H', e.target.checked));
   document.getElementById('mirrorV').addEventListener('change', e => onMirrorToggle('V', e.target.checked));
 
+  // save slot
+  document.getElementById('slot').addEventListener('change', e => {
+    state.slot = parseInt(e.target.value, 10) || 1;
+    updateMeta();
+  });
+
   // buttons
   document.getElementById('undoBtn').addEventListener('click', undo);
   document.getElementById('redoBtn').addEventListener('click', redo);
   document.getElementById('saveBtn').addEventListener('click', saveMap);
   document.getElementById('clearBtn').addEventListener('click', clearMap);
   document.getElementById('loadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+  document.getElementById('galaxyExport').addEventListener('click', exportGalaxy);  // tiny hidden dev export
 
   // minimap: toggle + click/drag to jump
   document.getElementById('minimapToggle').addEventListener('change', e => setMinimap(e.target.checked));
