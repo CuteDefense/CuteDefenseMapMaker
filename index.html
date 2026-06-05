@@ -72,7 +72,12 @@
   }
   .swatch:active { transform: translateY(1px); }
   .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-  .swatch .dot { width: 16px; height: 16px; border-radius: 4px; flex: 0 0 16px; border: 1px solid rgba(0,0,0,.4); }
+  .swatch.disabled { opacity: .35; cursor: not-allowed; }
+  .swatch .dot {
+    width: 18px; height: 18px; border-radius: 4px; flex: 0 0 18px; border: 1px solid rgba(0,0,0,.4);
+    display: flex; align-items: center; justify-content: center;
+    font: 700 11px/1 system-ui; color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000;
+  }
   .swatch span { font-size: 11.5px; }
 
   .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -164,6 +169,7 @@
   .status .led { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 12px; background: var(--muted); }
   .status.ok .led { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
   .status.bad .led { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+  .status.bad { cursor: pointer; }
   .status .txt { font-size: 11.5px; }
 
   .meta { color: var(--muted); font-size: 11px; display: flex; flex-direction: column; gap: 3px; }
@@ -229,6 +235,7 @@
       <select id="mode" class="select">
         <option value="standard">Standard</option>
         <option value="versus">Versus</option>
+        <option value="duos">Duos Versus</option>
       </select>
     </div>
 
@@ -273,6 +280,10 @@
       <div class="toggle">
         <label for="minimapToggle">Minimap (bottom-right)</label>
         <label class="switch"><input type="checkbox" id="minimapToggle" checked><span class="slider"></span></label>
+      </div>
+      <div class="toggle">
+        <label for="roomsToggle">Room zones (&ge;50, &le;4 openings)</label>
+        <label class="switch"><input type="checkbox" id="roomsToggle"><span class="slider"></span></label>
       </div>
       <button class="btn" id="minimapPngBtn">Save minimap PNG</button>
     </div>
@@ -341,8 +352,25 @@ let   MIN_SCALE = 1;          // recomputed from canvas size (fit-the-map zoom-o
 const BORDER = 2;
 const CORNER = 32;   // standard mode: each 32x32 map corner (e.g. 0,0..31,31) is unbuildable
 const NORMAL_AREA  = { x0: BORDER, y0: BORDER, x1: GRID - 1 - BORDER, y1: GRID - 1 - BORDER }; // [2,253]^2
-const VERSUS_AREA  = { x0: 2,   y0: 34, x1: 254, y1: 222 };
-const VERSUS_BLACK = { x0: 116, y0: 34, x1: 140, y1: 222 };  // spans the playable height exactly
+const VERSUS_AREA  = { x0: 2,   y0: 34, x1: 253, y1: 221 };   // top-right corner = 253,221
+const VERSUS_BLACK = { x0: 116, y0: 34, x1: 139, y1: 221 };   // central divider (x to 139, symmetric about 127.5); top lowered
+const DUOS_BLACK_H = { x0: 2,   y0: 114, x1: 253, y1: 141 };  // duos: horizontal divider spans the playable width
+
+// Game modes. forceH/forceV are mirrors locked on; allowSpawner gates the 1x1
+// spawner; psDefault is the canonical Player-Spawner anchor (centre of the
+// playable region). Versus/Duos share the versus playable area + 255 mirror axis.
+const MODES = {
+  standard: { label: 'Standard',     forceH: false, forceV: false, allowSpawner: true,  psDefault: { x: 126, y: 126 } },
+  versus:   { label: 'Versus',       forceH: false, forceV: true,  allowSpawner: false, psDefault: { x: 56,  y: 126 } },
+  duos:     { label: 'Duos Versus',  forceH: true,  forceV: true,  allowSpawner: false, psDefault: { x: 56,  y: 71  } },
+};
+
+// Spawner objects.
+const PS_SIZE = 4;            // Player Spawner footprint (4x4)
+const PS_COLOR = '#0ca678';   // teal
+const SP_SIZE = 1;            // Spawner footprint (1x1)
+const SP_COLOR = '#f06595';   // pink
+const SPAWNER_CAP = 8;
 
 // Stored coordinates use a different corner of each 2x2 wall than the editor's
 // bottom-left anchor: the saved point is one cell right and one cell down (in
@@ -365,10 +393,18 @@ const TYPE_LABEL = {
   RedFlowers:  'Red Flowers',
   BlueFlowers: 'Blue Flowers',
 };
+// Palette = the 4 wall types plus the two spawner objects.
+const PALETTE = [
+  ...TILE_TYPES.map(t => ({ type: t, label: TYPE_LABEL[t], color: TYPE_COLOR[t] })),
+  { type: 'PlayerSpawner', label: 'Player Spawner', color: PS_COLOR, spawner: true },
+  { type: 'Spawner',       label: 'Spawner',        color: SP_COLOR, spawner: true },
+];
 
 // Authoritative data model (per brief): a flat list of placed tiles.
 // The grid is DERIVED from this list, never stored as a full 2D tile array.
 let placedTiles = [];                       // [{x, y, type}]
+let playerSpawners = [];                    // [{x,y}] 4x4 teal; one canonical + forced-mirror copies
+let spawners = [];                          // [{x,y}] 1x1; cap 8; disabled in versus/duos
 const tileAt = new Map();                   // "x,y" anchor -> index into placedTiles (fast lookup)
 const occ = new Uint8Array(GRID * GRID);    // physical coverage bitmap: 1 = cell holds a tile (overlap test)
 // Path validity runs in two phases — "only red OR blue flowers exist at a time".
@@ -380,15 +416,18 @@ const blueOccBuf = new Uint8Array(GRID * GRID);
 const playableBuf = new Uint8Array(GRID * GRID);  // 1 = buildable / playable cell
 const chamberBuf = new Int32Array(GRID * GRID);   // 0 = non-playable, >=1 = lane id
 let numChambers = 0;
+const chamberSeed = [];                           // lane id -> a representative cell index
 
 const state = {
   tool: 'brush',           // 'brush' | 'room' | 'eraser' | 'pan'
   type: 'TallShrubs',
   mirrorH: false,
   mirrorV: false,
-  versus: false,           // versus mode: forced H-mirror + restricted playable area
+  gameMode: 'standard',    // 'standard' | 'versus' | 'duos'
+  versus: false,           // derived: gameMode !== 'standard' (versus-like: 255 axis + restricted area)
   showGrid: true,
   showMinimap: true,
+  showRooms: false,        // highlight enclosed room zones (off by default)
   slot: 1,                 // save-slot number used in the export filenames
 
   // camera: (camX,camY) is the world point centred in the viewport
@@ -408,6 +447,7 @@ const state = {
 
   valid: true,
   validMsg: '—',
+  errorCell: null,         // when invalid: a cell index in the offending area (click panel to zoom)
 };
 
 // DOM handles
@@ -425,6 +465,11 @@ const mapCacheCanvas = document.createElement('canvas');
 mapCacheCanvas.width = GRID; mapCacheCanvas.height = GRID;
 const mapCacheCtx = mapCacheCanvas.getContext('2d');
 let mapCacheDirty = true;
+// Room-zone overlay (256px, 1px/cell) — translucent fill of detected room cells.
+const roomOverlayCanvas = document.createElement('canvas');
+roomOverlayCanvas.width = GRID; roomOverlayCanvas.height = GRID;
+const roomOverlayCtx = roomOverlayCanvas.getContext('2d');
+let roomsDirty = true;
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const keyOf = (x, y) => x + ',' + y;
@@ -472,6 +517,18 @@ function fitView() {
   state.camY = HALF;
   clampCamera();
 }
+// Centre + zoom the camera on the current pathing error (panel click when invalid).
+function zoomToError() {
+  if (state.valid || state.errorCell == null) return;
+  const i = state.errorCell, cx = i % GRID, cy = (i - (i % GRID)) / GRID;
+  state.camX = cx + 0.5;
+  state.camY = cy + 0.5;
+  state.scale = clamp(16, MIN_SCALE, MAX_SCALE);
+  clampCamera();
+  updateMeta();
+  updateReadout();
+  requestRender();
+}
 
 /* ===========================================================================
  * 3. TILE MODEL & MIRROR MATH
@@ -480,13 +537,19 @@ function fitView() {
 const inBoundsAnchor = (x, y) => x >= 0 && y >= 0 && x <= MAX_ANCHOR && y <= MAX_ANCHOR;
 const footprint = (x, y) => [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]];
 
-// Reflection of a 2x2 ANCHOR. Mirroring flips a footprint (cell c' = 255 - c)
-// and takes its new bottom-left, giving anchor' = 254 - c (or 255 - c in Versus,
-// which is symmetric about cell 128 so mirrored tiles land in the opposite lane).
+// Reflection of a 2x2 ANCHOR about the map centre line (x/y = 127.5): a footprint
+// flips (cell c' = 255 - c) and its new bottom-left is anchor' = 254 - c. The
+// versus/duos playable area is also centred on 127.5, so all modes share this axis.
 //   reflX = flip across the VERTICAL axis  -> left <-> right  (Vertical mirror)
 //   reflY = flip across the HORIZONTAL axis -> top  <-> bottom (Horizontal mirror)
-const reflX = x => (state.versus ? GRID - 1 : GRID - 2) - x;
-const reflY = y => (state.versus ? GRID - 1 : GRID - 2) - y;
+const reflX = x => (GRID - 2) - x;
+const reflY = y => (GRID - 2) - y;
+// Size-aware anchor reflection (for N x N objects like the 4x4 player spawner).
+// For size 2 it equals reflX/reflY.
+const reflAnchorX = (x, size) => (GRID) - size - x;
+const reflAnchorY = (y, size) => (GRID) - size - y;
+const forcedH = () => MODES[state.gameMode].forceH;
+const forcedV = () => MODES[state.gameMode].forceV;
 
 // All distinct positions an edit touches under the active mirrors (1, 2 or 4).
 // Horizontal mirror flips top<->bottom (reflY); Vertical mirror flips left<->right (reflX).
@@ -578,14 +641,100 @@ function pruneUnbuildable() {
   if (keep.length !== placedTiles.length) { placedTiles = keep; rebuildDerived(); }
 }
 
+/* ---- Spawners (Player Spawner 4x4, Spawner 1x1) -------------------------- */
+const isSpawnerType = t => t === 'PlayerSpawner' || t === 'Spawner';
+
+function playerSpawnerCovers(cx, cy) {
+  return playerSpawners.some(ps => cx >= ps.x && cx < ps.x + PS_SIZE && cy >= ps.y && cy < ps.y + PS_SIZE);
+}
+function cellHasSpawner(cx, cy) {
+  return playerSpawnerCovers(cx, cy) || spawners.some(s => s.x === cx && s.y === cy);
+}
+function footprintClearOfSpawners(ax, ay) {
+  for (const [cx, cy] of footprint(ax, ay)) if (cellHasSpawner(cx, cy)) return false;
+  return true;
+}
+// An NxN object can sit at (ax,ay): in bounds, all cells playable, no wall, no
+// 1x1 spawner. (ignorePlayer skips player-spawner overlap, used when replacing it.)
+function objectFits(ax, ay, size, ignorePlayer) {
+  if (ax < 0 || ay < 0 || ax > GRID - size || ay > GRID - size) return false;
+  for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
+    const cx = ax + dx, cy = ay + dy;
+    if (playableBuf[cy * GRID + cx] !== 1) return false;
+    if (occ[cy * GRID + cx]) return false;
+    if (spawners.some(s => s.x === cx && s.y === cy)) return false;
+    if (!ignorePlayer && playerSpawnerCovers(cx, cy)) return false;
+  }
+  return true;
+}
+// Generic NxN object orbit under explicit mirror booleans.
+function objOrbit(x, y, size, useH, useV) {
+  const pts = [{ x, y }];
+  const add = (px, py) => { if (!pts.some(p => p.x === px && p.y === py)) pts.push({ x: px, y: py }); };
+  if (useH) add(x, reflAnchorY(y, size));
+  if (useV) add(reflAnchorX(x, size), y);
+  if (useH && useV) add(reflAnchorX(x, size), reflAnchorY(y, size));
+  return pts;
+}
+// Player-spawner orbit uses the mode's FORCED mirrors (mirrored in versus/duos,
+// single in standard) — independent of the manual mirror toggles.
+function psOrbit(x, y) { return objOrbit(x, y, PS_SIZE, forcedH(), forcedV()); }
+// Place / move the single Player Spawner (replaces existing) + its forced mirrors.
+function placePlayerSpawner(cellX, cellY) {
+  const ax = clamp(cellX - (PS_SIZE >> 1), 0, GRID - PS_SIZE);
+  const ay = clamp(cellY - (PS_SIZE >> 1), 0, GRID - PS_SIZE);
+  const pts = psOrbit(ax, ay);
+  for (const p of pts) if (!objectFits(p.x, p.y, PS_SIZE, true)) return false;  // ignore the one we replace
+  playerSpawners = pts.map(p => ({ x: p.x, y: p.y }));
+  state.structuralChange = true; mapCacheDirty = true;
+  return true;
+}
+// Place a 1x1 Spawner (no mirroring), capped, disabled in versus/duos.
+function placeSpawner(cellX, cellY) {
+  if (!MODES[state.gameMode].allowSpawner) return false;
+  const x = clamp(cellX, 0, GRID - 1), y = clamp(cellY, 0, GRID - 1);
+  if (!objectFits(x, y, SP_SIZE, false)) return false;
+  if (spawners.length >= SPAWNER_CAP) return false;
+  spawners.push({ x, y });
+  state.structuralChange = true; mapCacheDirty = true;
+  return true;
+}
+// Ensure a default Player Spawner exists (centre of the playable area).
+function ensurePlayerSpawner() {
+  if (playerSpawners.length) return;
+  const d = MODES[state.gameMode].psDefault;
+  playerSpawners = psOrbit(d.x, d.y).map(p => ({ x: p.x, y: p.y }));
+}
+// After a mode/axis change: keep the canonical Player Spawner, re-mirror it, and
+// drop the 1x1 spawners if the new mode disallows them (or they fell out of area).
+function resyncSpawnersForMode() {
+  let canon = playerSpawners.filter(ps => inCanonical(ps.x, ps.y));
+  playerSpawners = [];
+  if (canon.length) playerSpawners = psOrbit(canon[0].x, canon[0].y).map(p => ({ x: p.x, y: p.y }));
+  playerSpawners = playerSpawners.filter(ps => objectFits(ps.x, ps.y, PS_SIZE, true));
+  // if mirroring partially fits, just rebuild from the first survivor
+  if (playerSpawners.length) {
+    const first = playerSpawners[0];
+    playerSpawners = psOrbit(first.x, first.y).map(p => ({ x: p.x, y: p.y })).filter(ps => objectFits(ps.x, ps.y, PS_SIZE, true));
+  }
+  ensurePlayerSpawner();
+  spawners = MODES[state.gameMode].allowSpawner
+    ? spawners.filter(s => objectFits(s.x, s.y, SP_SIZE, true))
+    : [];
+  mapCacheDirty = true;
+}
+
 // Place the current tile type at a cell (and its mirror orbit). All-or-nothing
 // per cell so the map stays symmetric. Returns true if anything changed.
 function placeAtCell(cellX, cellY, type) {
+  if (type === 'PlayerSpawner') return placePlayerSpawner(cellX, cellY);
+  if (type === 'Spawner') return placeSpawner(cellX, cellY);
   const ax = clamp(cellX, 0, MAX_ANCHOR);
   const ay = clamp(cellY, 0, MAX_ANCHOR);
   const pts = orbit(ax, ay);
   for (const p of pts) {
-    if (!inBoundsAnchor(p.x, p.y) || !footprintBuildable(p.x, p.y) || !canOccupy(p.x, p.y)) return false;
+    if (!inBoundsAnchor(p.x, p.y) || !footprintBuildable(p.x, p.y) ||
+        !canOccupy(p.x, p.y) || !footprintClearOfSpawners(p.x, p.y)) return false;
   }
   let changed = false;
   for (const p of pts) {
@@ -596,14 +745,16 @@ function placeAtCell(cellX, cellY, type) {
   return changed;
 }
 
-// Erase the tile under a cell (and its mirror orbit).
+// Erase whatever is under a cell: a 1x1 spawner, the player spawner (all mirrors),
+// or the wall (and its mirror orbit).
 function eraseAtCell(cellX, cellY) {
-  const cov = coveringAnchor(cellX, cellY);
-  if (!cov) return false;
   let changed = false;
-  for (const p of orbit(cov.x, cov.y)) {
-    if (removeTileAt(p.x, p.y)) { changed = true; state.structuralChange = true; }
-  }
+  const si = spawners.findIndex(s => s.x === cellX && s.y === cellY);
+  if (si >= 0) { spawners.splice(si, 1); changed = true; }
+  if (playerSpawnerCovers(cellX, cellY)) { playerSpawners = []; changed = true; }
+  const cov = coveringAnchor(cellX, cellY);
+  if (cov) for (const p of orbit(cov.x, cov.y)) { if (removeTileAt(p.x, p.y)) changed = true; }
+  if (changed) { state.structuralChange = true; mapCacheDirty = true; }
   return changed;
 }
 
@@ -728,8 +879,10 @@ function rebuildPlayable() {
   for (let cy = a.y0; cy <= a.y1; cy++)
     for (let cx = a.x0; cx <= a.x1; cx++)
       playableBuf[cy * GRID + cx] = 1;
-  if (state.versus) {                       // carve out the central black divider
+  if (state.versus) {                       // versus & duos: central vertical divider
     carveRect(VERSUS_BLACK.x0, VERSUS_BLACK.y0, VERSUS_BLACK.x1, VERSUS_BLACK.y1);
+    if (state.gameMode === 'duos')          // duos: extra horizontal divider -> four lanes
+      carveRect(DUOS_BLACK_H.x0, DUOS_BLACK_H.y0, DUOS_BLACK_H.x1, DUOS_BLACK_H.y1);
   } else {                                  // standard: four 32x32 unbuildable corners
     const C = CORNER;
     carveRect(0, 0, C - 1, C - 1);                       // bottom-left
@@ -745,10 +898,12 @@ function rebuildPlayable() {
 function labelChambers() {
   chamberBuf.fill(0);
   numChambers = 0;
+  chamberSeed.length = 0; chamberSeed[0] = 0;
   const total = GRID * GRID;
   for (let s = 0; s < total; s++) {
     if (playableBuf[s] === 1 && chamberBuf[s] === 0) {
       numChambers++;
+      chamberSeed[numChambers] = s;          // a representative cell of this lane
       let head = 0, tail = 0;
       bfsQueue[tail++] = s; chamberBuf[s] = numChambers;
       while (head < tail) {
@@ -764,32 +919,38 @@ function labelChambers() {
 }
 
 // For one phase: every chamber's open cells (playable & not walled) must form
-// exactly one region. Reported as split (>1 region) or sealed (0 regions).
+// exactly one region. Reported as split (>1 region) or sealed (0 regions), plus
+// errorCell — a cell in the offending area (the cut-off region, or a sealed lane).
 function phaseValid(wall) {
   validVisited.fill(0);
-  const regions = new Int32Array(numChambers + 1);   // regions[laneId]
+  const perChamber = {};   // laneId -> [{ size, seed }]
   const total = GRID * GRID;
   for (let s = 0; s < total; s++) {
     if (playableBuf[s] === 1 && wall[s] === 0 && validVisited[s] === 0) {
-      regions[chamberBuf[s]]++;
-      let head = 0, tail = 0;
+      const lane = chamberBuf[s];
+      let head = 0, tail = 0, size = 0;
       bfsQueue[tail++] = s; validVisited[s] = 1;
       while (head < tail) {
-        const idx = bfsQueue[head++];
+        const idx = bfsQueue[head++]; size++;
         const cx = idx % GRID, cy = (idx - cx) / GRID;
         if (cx > 0)        { const n = idx - 1;    if (validVisited[n] === 0 && playableBuf[n] === 1 && wall[n] === 0) { validVisited[n] = 1; bfsQueue[tail++] = n; } }
         if (cx < GRID - 1) { const n = idx + 1;    if (validVisited[n] === 0 && playableBuf[n] === 1 && wall[n] === 0) { validVisited[n] = 1; bfsQueue[tail++] = n; } }
         if (cy > 0)        { const n = idx - GRID; if (validVisited[n] === 0 && playableBuf[n] === 1 && wall[n] === 0) { validVisited[n] = 1; bfsQueue[tail++] = n; } }
         if (cy < GRID - 1) { const n = idx + GRID; if (validVisited[n] === 0 && playableBuf[n] === 1 && wall[n] === 0) { validVisited[n] = 1; bfsQueue[tail++] = n; } }
       }
+      (perChamber[lane] = perChamber[lane] || []).push({ size, seed: s });
     }
   }
-  let split = false, sealed = false;
+  let split = false, sealed = false, splitCell = null, sealedCell = null;
   for (let c = 1; c <= numChambers; c++) {
-    if (regions[c] === 0) sealed = true;
-    else if (regions[c] > 1) split = true;
+    const regs = perChamber[c];
+    if (!regs || regs.length === 0) { sealed = true; if (sealedCell === null) sealedCell = chamberSeed[c]; }
+    else if (regs.length > 1) {
+      split = true;
+      if (splitCell === null) { regs.sort((a, b) => a.size - b.size); splitCell = regs[0].seed; }  // smallest = cut-off piece
+    }
   }
-  return { ok: !split && !sealed, split, sealed };
+  return { ok: !split && !sealed, split, sealed, errorCell: splitCell !== null ? splitCell : sealedCell };
 }
 
 function recomputeValidity() {
@@ -803,6 +964,7 @@ function recomputeValidity() {
   const r = phaseValid(redOccBuf);
   const b = phaseValid(blueOccBuf);
   const ok = r.ok && b.ok;
+  state.errorCell = ok ? null : (!r.ok ? r.errorCell : b.errorCell);
   const lanes = numChambers > 1 ? ` · ${numChambers} lanes` : '';
   const why = p => (p.sealed && p.split) ? 'lane sealed/split' : p.sealed ? 'lane sealed' : 'path split';
   let msg;
@@ -810,6 +972,7 @@ function recomputeValidity() {
   else if (!r.ok && !b.ok) msg = `Invalid — red & blue ${why(r)}`;
   else if (!r.ok)          msg = `Invalid — red-phase ${why(r)}`;
   else                     msg = `Invalid — blue-phase ${why(b)}`;
+  if (!ok && state.errorCell != null) msg += ' · click to zoom';
   setValidity(ok, msg);
 }
 function setValidity(ok, msg) {
@@ -821,6 +984,135 @@ function setValidity(ok, msg) {
   el.querySelector('.txt').textContent = msg;
 }
 
+/* ---- Room-zone detection -------------------------------------------------
+ * A "room" is an enclosed pocket of open floor (>= 50 cells) whose only links to
+ * the rest of its lane are openings <= 4 wide/tall. Detected by eroding the open
+ * space by 2 (Chebyshev) — pinching off any <=4 opening — so within each lane the
+ * largest eroded core is the field and every other core is a room. The room is
+ * the core dilated back by exactly 2 (its true extent), which stops at the walls
+ * and at the opening (it does NOT bleed down the doorway/corridor). Each room is
+ * then decomposed into the fewest axis-aligned rectangles and given its own hue.
+ * ------------------------------------------------------------------------- */
+const roomZone = new Uint8Array(GRID * GRID);
+const roomCoreBuf = new Uint8Array(GRID * GRID);
+const roomCoreId = new Int32Array(GRID * GRID);
+const roomCellCore = new Int32Array(GRID * GRID);
+const ROOM_MIN_AREA = 50;
+
+// Largest all-1 rectangle in a W*H binary grid (histogram method); returns its
+// position + size, or area 0 if empty.
+function maxRectIn(g, W, H) {
+  const heights = new Int32Array(W);
+  let best = { x: 0, y: 0, w: 0, h: 0, area: 0 };
+  const stack = [];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) heights[x] = g[y * W + x] ? heights[x] + 1 : 0;
+    stack.length = 0;
+    for (let x = 0; x <= W; x++) {
+      const hh = x < W ? heights[x] : 0;
+      while (stack.length && heights[stack[stack.length - 1]] >= hh) {
+        const top = stack.pop();
+        const height = heights[top];
+        const left = stack.length ? stack[stack.length - 1] + 1 : 0;
+        const area = height * (x - left);
+        if (area > best.area) best = { x: left, y: y - height + 1, w: x - left, h: height, area };
+      }
+      stack.push(x);
+    }
+  }
+  return best;
+}
+// Decompose a labelled room (roomCellCore === label) into few rectangles by
+// greedily carving the largest rectangle until covered.
+function decomposeRoom(label) {
+  let minx = GRID, miny = GRID, maxx = -1, maxy = -1;
+  for (let i = 0; i < GRID * GRID; i++) if (roomCellCore[i] === label) {
+    const x = i % GRID, y = (i - x) / GRID;
+    if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+  }
+  if (maxx < 0) return [];
+  const W = maxx - minx + 1, H = maxy - miny + 1;
+  const g = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (roomCellCore[(miny + y) * GRID + (minx + x)] === label) g[y * W + x] = 1;
+  const rects = [];
+  for (let guard = 0; guard < 400; guard++) {
+    const b = maxRectIn(g, W, H);
+    if (b.area === 0) break;
+    rects.push({ x0: minx + b.x, y0: miny + b.y, x1: minx + b.x + b.w - 1, y1: miny + b.y + b.h - 1 });
+    for (let yy = b.y; yy < b.y + b.h; yy++) for (let xx = b.x; xx < b.x + b.w; xx++) g[yy * W + xx] = 0;
+  }
+  return rects;
+}
+
+function recomputeRooms() {
+  roomZone.fill(0);
+  roomOverlayCtx.clearRect(0, 0, GRID, GRID);
+  const total = GRID * GRID;
+  const isOpen = i => playableBuf[i] === 1 && occ[i] === 0;
+
+  // erode by Chebyshev-2 (5x5 all-open) — pinches off openings <= 4 wide/tall
+  roomCoreBuf.fill(0);
+  for (let y = 2; y < GRID - 2; y++) for (let x = 2; x < GRID - 2; x++) {
+    const i = y * GRID + x;
+    if (!isOpen(i)) continue;
+    let ok = true;
+    for (let dy = -2; dy <= 2 && ok; dy++) for (let dx = -2; dx <= 2; dx++) if (!isOpen((y + dy) * GRID + (x + dx))) { ok = false; break; }
+    if (ok) roomCoreBuf[i] = 1;
+  }
+  // label core components (4-conn); track size + lane
+  roomCoreId.fill(0); let nCores = 0;
+  const coreSize = [0], coreLane = [0];
+  for (let s = 0; s < total; s++) if (roomCoreBuf[s] && !roomCoreId[s]) {
+    nCores++; coreSize[nCores] = 0; coreLane[nCores] = chamberBuf[s];
+    let h = 0, t = 0; bfsQueue[t++] = s; roomCoreId[s] = nCores;
+    while (h < t) {
+      const idx = bfsQueue[h++]; coreSize[nCores]++;
+      const cx = idx % GRID, cy = (idx - (idx % GRID)) / GRID;
+      if (cx > 0)        { const n = idx - 1;    if (roomCoreBuf[n] && !roomCoreId[n]) { roomCoreId[n] = nCores; bfsQueue[t++] = n; } }
+      if (cx < GRID - 1) { const n = idx + 1;    if (roomCoreBuf[n] && !roomCoreId[n]) { roomCoreId[n] = nCores; bfsQueue[t++] = n; } }
+      if (cy > 0)        { const n = idx - GRID; if (roomCoreBuf[n] && !roomCoreId[n]) { roomCoreId[n] = nCores; bfsQueue[t++] = n; } }
+      if (cy < GRID - 1) { const n = idx + GRID; if (roomCoreBuf[n] && !roomCoreId[n]) { roomCoreId[n] = nCores; bfsQueue[t++] = n; } }
+    }
+  }
+  if (!nCores) return;
+  // each lane's biggest core is the field (not a room)
+  const mainCore = {};
+  for (let c = 1; c <= nCores; c++) { const ch = coreLane[c]; if (mainCore[ch] === undefined || coreSize[c] > coreSize[mainCore[ch]]) mainCore[ch] = c; }
+  // dilate every core back by exactly 2 (8-neighbour) over open cells — this is
+  // the room's real extent and stops at the walls/opening (no corridor bleed).
+  roomCellCore.fill(0);
+  let frontier = [];
+  for (let s = 0; s < total; s++) if (roomCoreId[s]) { roomCellCore[s] = roomCoreId[s]; frontier.push(s); }
+  for (let round = 0; round < 2; round++) {
+    const next = [];
+    for (const idx of frontier) {
+      const cid = roomCellCore[idx], cx = idx % GRID, cy = (idx - (idx % GRID)) / GRID;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+        const n = ny * GRID + nx;
+        if (!roomCellCore[n] && isOpen(n)) { roomCellCore[n] = cid; next.push(n); }
+      }
+    }
+    frontier = next;
+  }
+  // area of each dilated region; rooms = non-main cores with area >= 50
+  const area = new Int32Array(nCores + 1);
+  for (let i = 0; i < total; i++) { const c = roomCellCore[i]; if (c) area[c]++; }
+  let roomIdx = 0;
+  for (let c = 1; c <= nCores; c++) {
+    if (c === mainCore[coreLane[c]] || area[c] < ROOM_MIN_AREA) continue;
+    for (let i = 0; i < total; i++) if (roomCellCore[i] === c) roomZone[i] = 1;
+    const hue = (roomIdx * 53 + 280) % 360;     // distinct hue per room
+    roomIdx++;
+    roomOverlayCtx.fillStyle = `hsla(${hue}, 80%, 58%, 0.45)`;
+    for (const r of decomposeRoom(c)) {
+      roomOverlayCtx.fillRect(r.x0, GRID - 1 - r.y1, r.x1 - r.x0 + 1, r.y1 - r.y0 + 1);  // y-flip
+    }
+  }
+}
+
 /* ===========================================================================
  * 5. SAVE / LOAD — SC2Bank XML
  * ======================================================================== */
@@ -830,6 +1122,7 @@ function setValidity(ok, msg) {
 function buildBankXML() {
   const byType = { TallShrubs: [], Flowers: [], RedFlowers: [], BlueFlowers: [] };
   for (const t of placedTiles) if (inCanonical(t.x, t.y)) byType[t.type].push(t);
+  const psCanon = playerSpawners.filter(ps => inCanonical(ps.x, ps.y));
 
   let xml = '<?xml version="1.0" encoding="utf-8"?>\n<Bank version="1">\n';
   for (const type of TILE_TYPES) {
@@ -841,13 +1134,27 @@ function buildBankXML() {
     });
     xml += `    </Section>\n`;
   }
-  // Per-type counts.
+  // Counts — walls and spawners (canonical counts, matching what is written).
   xml += `    <Section name="Count">\n`;
   for (const type of TILE_TYPES) {
     xml += `        <Key name="${type}">\n` +
            `            <Value int="${byType[type].length}"/>\n` +
            `        </Key>\n`;
   }
+  xml += `        <Key name="PlayerSpawner">\n            <Value int="${psCanon.length}"/>\n        </Key>\n`;
+  xml += `        <Key name="Spawner">\n            <Value int="${spawners.length}"/>\n        </Key>\n`;
+  xml += `    </Section>\n`;
+  // Spawners — only the canonical Player Spawner (mirrors regenerate on load);
+  // all 1x1 Spawners. Same corner offset as walls.
+  xml += `    <Section name="PlayerSpawner">\n`;
+  psCanon.forEach((ps, idx) => {
+    xml += `        <Key name="${idx}">\n            <Value point="${ps.x + PT_DX},${ps.y + PT_DY}"/>\n        </Key>\n`;
+  });
+  xml += `    </Section>\n`;
+  xml += `    <Section name="Spawner">\n`;
+  spawners.forEach((s, idx) => {
+    xml += `        <Key name="${idx}">\n            <Value point="${s.x + PT_DX},${s.y + PT_DY}"/>\n        </Key>\n`;
+  });
   xml += `    </Section>\n`;
   // Mirror state. The game stores this as "Disabled Mirror": flag 0 = NOT
   // disabled = mirror ON, flag 1 = disabled = mirror OFF. Versus is not written
@@ -862,7 +1169,7 @@ function buildBankXML() {
 }
 
 // Filename helpers — e.g. CustomCuteDefenseMapVersus2.
-function modeName() { return state.versus ? 'Versus' : 'Standard'; }
+function modeName() { return state.gameMode === 'duos' ? 'DuosVersus' : state.gameMode === 'versus' ? 'Versus' : 'Standard'; }
 function mapBaseName() { return `CustomCuteDefenseMap${modeName()}${state.slot}`; }
 
 function downloadFile(filename, text, mime) {
@@ -954,8 +1261,10 @@ function exportOverlayPng() {
 // { mh, mv, points:[{px,py,type}] } in the raw stored (game) coordinate frame.
 function parseBank(text) {
   text = String(text).replace(/^\uFEFF/, '').trim();   // drop a UTF-8 BOM / leading whitespace
-  const data = { mh: false, mv: false, points: [] };
+  const data = { mh: false, mv: false, points: [], ps: [], sp: [] };
   const isOn = flag => flag === '0';                   // "Disabled Mirror": 0 = mirror ON
+  const bucket = name => TILE_TYPES.includes(name) ? data.points
+    : name === 'PlayerSpawner' ? data.ps : name === 'Spawner' ? data.sp : null;
 
   // ---- attempt 1: DOMParser ----
   try {
@@ -965,13 +1274,14 @@ function parseBank(text) {
       if (sections.length) {
         for (const sec of sections) {
           const name = sec.getAttribute('name') || '';
-          if (TILE_TYPES.includes(name)) {
+          const into = bucket(name);
+          if (into) {
             for (const v of sec.getElementsByTagName('Value')) {
               const pt = v.getAttribute('point');
               if (!pt) continue;
               const [a, b] = pt.split(',');
               const px = parseInt(a, 10), py = parseInt(b, 10);
-              if (Number.isFinite(px) && Number.isFinite(py)) data.points.push({ px, py, type: name });
+              if (Number.isFinite(px) && Number.isFinite(py)) into.push({ px, py, type: name });
             }
           } else if (/mirror/i.test(name)) {
             for (const key of sec.getElementsByTagName('Key')) {
@@ -992,10 +1302,10 @@ function parseBank(text) {
   const secRe = /<Section\s+name="([^"]*)"\s*>([\s\S]*?)<\/Section>/g;
   let m;
   while ((m = secRe.exec(text))) {
-    const name = m[1], body = m[2];
-    if (TILE_TYPES.includes(name)) {
+    const name = m[1], body = m[2], into = bucket(name);
+    if (into) {
       let pm; const ptRe = /point="\s*(-?\d+)\s*,\s*(-?\d+)\s*"/g;
-      while ((pm = ptRe.exec(body))) data.points.push({ px: +pm[1], py: +pm[2], type: name });
+      while ((pm = ptRe.exec(body))) into.push({ px: +pm[1], py: +pm[2], type: name });
     } else if (/mirror/i.test(name)) {
       let km; const keyRe = /<Key\s+name="([^"]*)"\s*>([\s\S]*?)<\/Key>/g;
       while ((km = keyRe.exec(body))) {
@@ -1027,7 +1337,8 @@ function loadBankXML(text) {
   placedTiles = [];
   tileAt.clear();
   occ.fill(0);
-  state.versus = false;        // versus is not stored; it loads as a mirrored standard map
+  state.gameMode = 'standard'; // mode is not stored; loads as a mirrored standard map
+  state.versus = false;
   state.mirrorH = mh;
   state.mirrorV = mv;
   rebuildPlayable();
@@ -1035,6 +1346,23 @@ function loadBankXML(text) {
     for (const p of orbit(t.x, t.y)) {            // the wall + its reflections under the loaded flags
       if (!tileAt.has(keyOf(p.x, p.y))) addTile(p.x, p.y, t.type);
     }
+  }
+  // Player spawner: reconstruct from the stored canonical point(s), mirrored by
+  // the loaded flags (so it matches the walls). Default to centre if none.
+  playerSpawners = [];
+  for (const p of data.ps) {
+    const x = p.px - PT_DX, y = p.py - PT_DY;
+    if (x < 0 || y < 0 || x > GRID - PS_SIZE || y > GRID - PS_SIZE) continue;
+    for (const q of objOrbit(x, y, PS_SIZE, state.mirrorH, state.mirrorV))
+      if (!playerSpawners.some(s => s.x === q.x && s.y === q.y)) playerSpawners.push({ x: q.x, y: q.y });
+  }
+  ensurePlayerSpawner();
+  // 1x1 spawners (no mirroring), capped.
+  spawners = [];
+  for (const p of data.sp) {
+    const x = p.px - PT_DX, y = p.py - PT_DY;
+    if (x >= 0 && y >= 0 && x < GRID && y < GRID && spawners.length < SPAWNER_CAP &&
+        !spawners.some(s => s.x === x && s.y === y)) spawners.push({ x, y });
   }
   syncControls();
   recomputeValidity();
@@ -1055,12 +1383,18 @@ let pendingUndo = null;     // snapshot captured at the start of a paint/erase/r
 function snapshot() {
   return {
     tiles: placedTiles.map(t => ({ x: t.x, y: t.y, type: t.type })),
-    mirrorH: state.mirrorH, mirrorV: state.mirrorV, versus: state.versus,
+    ps: playerSpawners.map(s => ({ x: s.x, y: s.y })),
+    sp: spawners.map(s => ({ x: s.x, y: s.y })),
+    mirrorH: state.mirrorH, mirrorV: state.mirrorV, gameMode: state.gameMode,
   };
 }
 function restoreSnapshot(s) {
   placedTiles = s.tiles.map(t => ({ x: t.x, y: t.y, type: t.type }));
-  state.mirrorH = s.mirrorH; state.mirrorV = s.mirrorV; state.versus = s.versus;
+  playerSpawners = (s.ps || []).map(p => ({ x: p.x, y: p.y }));
+  spawners = (s.sp || []).map(p => ({ x: p.x, y: p.y }));
+  state.mirrorH = s.mirrorH; state.mirrorV = s.mirrorV;
+  state.gameMode = s.gameMode || 'standard';
+  state.versus = state.gameMode !== 'standard';
   rebuildDerived();
   rebuildPlayable();
   syncControls();
@@ -1104,18 +1438,48 @@ function requestRender() {
 }
 
 function render() {
-  if (mapCacheDirty) { renderMapCache(); mapCacheDirty = false; }
+  if (mapCacheDirty) { renderMapCache(); mapCacheDirty = false; roomsDirty = true; }
   const dpr = window.devicePixelRatio || 1;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);   // draw in CSS px; backing store is DPR-scaled
   ctx.clearRect(0, 0, viewW, viewH);
+  updateSpawnerCount();                     // keep the x/8 counter live
   drawBackground();
   drawTiles();
+  drawSpawnersLayer();
+  if (state.showRooms) {
+    if (roomsDirty) { recomputeRooms(); roomsDirty = false; }
+    const rr = worldRectToScreen(0, 0, GRID, GRID);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(roomOverlayCanvas, 0, 0, GRID, GRID, rr.x, rr.y, rr.w, rr.h);
+  }
   if (state.showGrid) drawGrid();
   drawUnbuildable();
   drawAxes();
   drawBorder();
   drawGhost();
   if (state.showMinimap) drawMinimap();
+}
+
+// Player spawners (4x4 teal) and 1x1 spawners on the main canvas.
+function drawSpawnersLayer() {
+  for (const ps of playerSpawners) {
+    const s = worldRectToScreen(ps.x, ps.y, ps.x + PS_SIZE, ps.y + PS_SIZE);
+    ctx.fillStyle = PS_COLOR;
+    ctx.fillRect(s.x, s.y, s.w, s.h);
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.strokeRect(s.x + 1, s.y + 1, s.w - 2, s.h - 2);
+    if (Math.min(s.w, s.h) >= 16) {
+      ctx.fillStyle = '#062a22'; ctx.font = `bold ${Math.min(s.w, s.h) * 0.5}px system-ui`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('P', s.x + s.w / 2, s.y + s.h / 2 + 1);
+    }
+  }
+  for (const sp of spawners) {
+    const s = worldRectToScreen(sp.x, sp.y, sp.x + SP_SIZE, sp.y + SP_SIZE);
+    ctx.fillStyle = SP_COLOR;
+    ctx.fillRect(s.x, s.y, s.w, s.h);
+    if (Math.min(s.w, s.h) >= 4) { ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeRect(s.x + 0.5, s.y + 0.5, s.w - 1, s.h - 1); }
+  }
 }
 
 // Four quadrant background. (0,0) is bottom-left in world space.
@@ -1275,6 +1639,7 @@ function drawUnbuildable() {
   const k = VERSUS_BLACK;
   ctx.fillStyle = '#000';
   fillWorldRect(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID));
+  if (state.gameMode === 'duos') { const d = DUOS_BLACK_H; fillWorldRect(d.x0, d.y0, d.x1 + 1, d.y1 + 1); }
 }
 
 // --- Minimap ---------------------------------------------------------------
@@ -1301,7 +1666,11 @@ function renderMapCache() {
     mcFill(a.x1 + 1, a.y0, GRID, a.y1 + 1, dim);
     const k = VERSUS_BLACK;
     mcFill(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID), '#000');
+    if (state.gameMode === 'duos') { const d = DUOS_BLACK_H; mcFill(d.x0, d.y0, d.x1 + 1, d.y1 + 1, '#000'); }
   }
+  // spawners on top
+  for (const ps of playerSpawners) mcFill(ps.x, ps.y, ps.x + PS_SIZE, ps.y + PS_SIZE, PS_COLOR);
+  for (const sp of spawners) mcFill(sp.x, sp.y, sp.x + SP_SIZE, sp.y + SP_SIZE, SP_COLOR);
 }
 function drawMinimap() {
   const dpr = window.devicePixelRatio || 1;
@@ -1360,12 +1729,35 @@ function drawGhost() {
     if (cov) for (const p of orbit(cov.x, cov.y)) eraseOutline(p.x, p.y);
     return;
   }
-  // brush / room hover
+  if (isSpawnerType(state.type)) { drawSpawnerGhost(); return; }
+  // brush / room hover (walls)
   const ax = clamp(state.hoverCell.x, 0, MAX_ANCHOR);
   const ay = clamp(state.hoverCell.y, 0, MAX_ANCHOR);
   const pts = orbit(ax, ay);
-  const ok = pts.every(p => inBoundsAnchor(p.x, p.y) && footprintBuildable(p.x, p.y) && canOccupy(p.x, p.y));
+  const ok = pts.every(p => inBoundsAnchor(p.x, p.y) && footprintBuildable(p.x, p.y) && canOccupy(p.x, p.y) && footprintClearOfSpawners(p.x, p.y));
   for (const p of pts) ghostRect(p.x, p.y, ok);
+}
+
+function objGhost(x, y, size, ok, color) {
+  const s = worldRectToScreen(x, y, x + size, y + size);
+  ctx.fillStyle = ok ? hexA(color, 0.5) : 'rgba(239,75,75,0.35)';
+  ctx.fillRect(s.x, s.y, s.w, s.h);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = ok ? 'rgba(255,255,255,0.9)' : 'rgba(239,75,75,0.95)';
+  ctx.strokeRect(s.x + 1, s.y + 1, s.w - 2, s.h - 2);
+}
+function drawSpawnerGhost() {
+  const c = state.hoverCell;
+  if (state.type === 'PlayerSpawner') {
+    const ax = clamp(c.x - (PS_SIZE >> 1), 0, GRID - PS_SIZE), ay = clamp(c.y - (PS_SIZE >> 1), 0, GRID - PS_SIZE);
+    const pts = psOrbit(ax, ay);
+    const ok = pts.every(p => objectFits(p.x, p.y, PS_SIZE, true));
+    for (const p of pts) objGhost(p.x, p.y, PS_SIZE, ok, PS_COLOR);
+  } else {
+    const x = clamp(c.x, 0, GRID - 1), y = clamp(c.y, 0, GRID - 1);
+    const ok = MODES[state.gameMode].allowSpawner && spawners.length < SPAWNER_CAP && objectFits(x, y, SP_SIZE, false);
+    objGhost(x, y, SP_SIZE, ok, SP_COLOR);
+  }
 }
 
 function drawFillPreview() {
@@ -1374,8 +1766,8 @@ function drawFillPreview() {
   // so the min/max anchors swap under reflection).
   const rects = [{ x0: ax0, y0: ay0, x1: ax1, y1: ay1 }];
   const addR = r => { if (!rects.some(q => q.x0 === r.x0 && q.y0 === r.y0 && q.x1 === r.x1 && q.y1 === r.y1)) rects.push(r); };
-  if (state.mirrorH) addR({ x0: reflX(ax1), y0: ay0, x1: reflX(ax0), y1: ay1 });
-  if (state.mirrorV) addR({ x0: ax0, y0: reflY(ay1), x1: ax1, y1: reflY(ay0) });
+  if (state.mirrorH) addR({ x0: ax0, y0: reflY(ay1), x1: ax1, y1: reflY(ay0) });   // H reflects y
+  if (state.mirrorV) addR({ x0: reflX(ax1), y0: ay0, x1: reflX(ax0), y1: ay1 });   // V reflects x
   if (state.mirrorH && state.mirrorV) addR({ x0: reflX(ax1), y0: reflY(ay1), x1: reflX(ax0), y1: reflY(ay0) });
   ctx.lineWidth = 2;
   ctx.setLineDash([6, 4]);
@@ -1529,10 +1921,10 @@ function onKeyDown(e) {
     case 'h': setTool('pan'); break;
     case 'g': state.showGrid = !state.showGrid; requestRender(); break;
     case 'm': setMinimap(!state.showMinimap); break;
-    case '1': setType(TILE_TYPES[0]); break;
-    case '2': setType(TILE_TYPES[1]); break;
-    case '3': setType(TILE_TYPES[2]); break;
-    case '4': setType(TILE_TYPES[3]); break;
+    case 'z': setRooms(!state.showRooms); break;
+    case '1': case '2': case '3': case '4': case '5': case '6': {
+      const item = PALETTE[+e.key - 1]; if (item) setType(item.type); break;
+    }
   }
 }
 function onKeyUp(e) {
@@ -1543,19 +1935,31 @@ function onKeyUp(e) {
  * 8. UI WIRING & INIT
  * ======================================================================== */
 
+function spawnerAllowedNow(type) {
+  return type !== 'Spawner' || MODES[state.gameMode].allowSpawner;   // 1x1 Spawner disabled in versus/duos
+}
 function buildPalette() {
   const el = document.getElementById('palette');
   el.innerHTML = '';
-  for (const type of TILE_TYPES) {
+  PALETTE.forEach((item, i) => {
+    const disabled = !spawnerAllowedNow(item.type);
     const div = document.createElement('div');
-    div.className = 'swatch' + (type === state.type ? ' active' : '');
-    div.dataset.type = type;
-    div.innerHTML = `<span class="dot" style="background:${TYPE_COLOR[type]}"></span><span>${TYPE_LABEL[type]}</span>`;
-    div.addEventListener('click', () => setType(type));
+    div.className = 'swatch' + (item.type === state.type ? ' active' : '') + (disabled ? ' disabled' : '');
+    div.dataset.type = item.type;
+    const hotkey = i + 1;                       // palette hotkeys are 1..6
+    const label = item.type === 'Spawner' ? `Spawner <b id="spawnerCount">0/${SPAWNER_CAP}</b>` : item.label;
+    div.innerHTML = `<span class="dot" style="background:${item.color}">${hotkey}</span><span>${label}</span>`;
+    if (!disabled) div.addEventListener('click', () => setType(item.type));
     el.appendChild(div);
-  }
+  });
+  updateSpawnerCount();
+}
+function updateSpawnerCount() {
+  const el = document.getElementById('spawnerCount');
+  if (el) el.textContent = `${spawners.length}/${SPAWNER_CAP}`;
 }
 function setType(type) {
+  if (!spawnerAllowedNow(type)) return;
   state.type = type;
   if (state.tool === 'eraser' || state.tool === 'pan') setTool('brush');
   for (const el of document.querySelectorAll('#palette .swatch'))
@@ -1571,7 +1975,7 @@ function setTool(tool) {
 }
 
 function onMirrorToggle(which, enabled) {
-  if (which === 'V' && state.versus) { syncControls(); return; }  // Vertical (left<->right) is locked on in versus
+  if ((which === 'H' && forcedH()) || (which === 'V' && forcedV())) { syncControls(); return; }  // forced mirror locked
   if (enabled) {
     const plan = mirrorPlan(which);
     const axisName = which === 'H' ? 'Horizontal' : 'Vertical';
@@ -1594,17 +1998,22 @@ function onMirrorToggle(which, enabled) {
   requestRender();
 }
 
-// Versus: the two lanes are left<->right mirrors, so force the VERTICAL mirror
-// (flip over the vertical axis) on, and restrict to the versus playable area.
-function onVersusToggle(enabled) {
+// Switch game mode (standard / versus / duos). Versus forces the Vertical mirror;
+// Duos forces both. The mirror axis changes with the mode, so rebuild from
+// canonical and re-mirror to avoid off-by-one duplicates.
+function setMode(name) {
+  if (!MODES[name]) return;
   commitHistory(snapshot());
-  state.versus = enabled;
-  if (enabled) state.mirrorV = true;        // forced on; left<->right lane mirror (versus axis)
-  rebuildPlayable();                        // playable mask depends on the mode
-  pruneUnbuildable();                       // drop tiles now outside the playable area
-  // The mirror axis changes with the mode, so rebuild from canonical to avoid
-  // duplicating existing reflections one cell off at the new axis.
+  const cfg = MODES[name];
+  state.gameMode = name;
+  state.versus = name !== 'standard';
+  if (cfg.forceH) state.mirrorH = true;
+  if (cfg.forceV) state.mirrorV = true;
+  rebuildPlayable();
+  pruneUnbuildable();
   if (state.mirrorH || state.mirrorV) resymmetrizeAll();
+  resyncSpawnersForMode();
+  if (!spawnerAllowedNow(state.type)) state.type = 'TallShrubs';  // selected tool got disabled
   syncControls();
   recomputeValidity();
   updateMeta();
@@ -1612,12 +2021,12 @@ function onVersusToggle(enabled) {
 }
 
 function syncControls() {                   // reflect state -> UI (after load / mode change)
-  document.getElementById('mirrorH').checked = state.mirrorH;
-  const v = document.getElementById('mirrorV');
-  v.checked = state.mirrorV;
-  v.disabled = state.versus;                // Vertical (left<->right) is locked on in versus
+  const h = document.getElementById('mirrorH'), v = document.getElementById('mirrorV');
+  h.checked = state.mirrorH; v.checked = state.mirrorV;
+  h.disabled = forcedH(); v.disabled = forcedV();   // forced mirrors can't be toggled off
   const m = document.getElementById('mode');
-  if (m) m.value = state.versus ? 'versus' : 'standard';
+  if (m) m.value = state.gameMode;
+  buildPalette();                           // refresh disabled state of the Spawner swatch
 }
 
 function updateMeta() {
@@ -1625,7 +2034,8 @@ function updateMeta() {
   // zoom shown relative to a ~6px-per-cell baseline = "100%", just for intuition
   document.getElementById('zoomPct').textContent = Math.round(state.scale * 100 / 6) + '%';
   let region;
-  if (state.versus) region = 'versus · left lane';
+  if (state.gameMode === 'duos') region = 'duos · 1 quadrant lane';
+  else if (state.gameMode === 'versus') region = 'versus · left lane';
   else if (state.mirrorH && state.mirrorV) region = 'bottom-left quadrant';
   else if (state.mirrorH) region = 'bottom half';   // Horizontal reflects y (top/bottom)
   else if (state.mirrorV) region = 'left half';     // Vertical reflects x (left/right)
@@ -1650,11 +2060,14 @@ function toast(msg, kind) {
 }
 
 function clearMap() {
-  if (!placedTiles.length) { toast('Map is already empty', 'ok'); return; }
+  if (!placedTiles.length && !spawners.length) { toast('Map is already empty', 'ok'); return; }
   commitHistory(snapshot());
   placedTiles = [];
   tileAt.clear();
   occ.fill(0);
+  spawners = [];
+  playerSpawners = [];
+  ensurePlayerSpawner();      // keep the default player spawner in the middle
   mapCacheDirty = true;
   recomputeValidity();
   updateMeta();
@@ -1675,6 +2088,13 @@ function setMinimap(on) {
   const cb = document.getElementById('minimapToggle');
   if (cb) cb.checked = on;
   if (on) requestRender();
+}
+function setRooms(on) {
+  state.showRooms = on;
+  if (on) roomsDirty = true;
+  const cb = document.getElementById('roomsToggle');
+  if (cb) cb.checked = on;
+  requestRender();
 }
 
 function resize() {
@@ -1700,7 +2120,7 @@ function init() {
     el.addEventListener('click', () => setTool(el.dataset.tool));
 
   // mode dropdown + mirror toggles
-  document.getElementById('mode').addEventListener('change', e => onVersusToggle(e.target.value === 'versus'));
+  document.getElementById('mode').addEventListener('change', e => setMode(e.target.value));
   document.getElementById('mirrorH').addEventListener('change', e => onMirrorToggle('H', e.target.checked));
   document.getElementById('mirrorV').addEventListener('change', e => onMirrorToggle('V', e.target.checked));
 
@@ -1716,12 +2136,14 @@ function init() {
   document.getElementById('saveBtn').addEventListener('click', saveMap);
   document.getElementById('clearBtn').addEventListener('click', clearMap);
   document.getElementById('loadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+  document.getElementById('validity').addEventListener('click', zoomToError);  // jump to the pathing error
   document.getElementById('minimapPngBtn').addEventListener('click', saveMinimapPng);
   document.getElementById('galaxyExport').addEventListener('click', exportGalaxy);   // tiny hidden dev export
   document.getElementById('overlayExport').addEventListener('click', exportOverlayPng);
 
   // minimap: toggle + click/drag to jump
   document.getElementById('minimapToggle').addEventListener('change', e => setMinimap(e.target.checked));
+  document.getElementById('roomsToggle').addEventListener('change', e => setRooms(e.target.checked));
   let mmDragging = false;
   minimap.addEventListener('pointerdown', e => { mmDragging = true; minimap.setPointerCapture(e.pointerId); minimapJump(e); });
   minimap.addEventListener('pointermove', e => { if (mmDragging) minimapJump(e); });
@@ -1752,6 +2174,7 @@ function init() {
   fitView();
   setupMinimap();
   rebuildPlayable();      // build the playable mask + lane labels before first validity check
+  ensurePlayerSpawner();  // default player spawner in the middle
   recomputeValidity();
   updateMeta();
   updateUndoButtons();
