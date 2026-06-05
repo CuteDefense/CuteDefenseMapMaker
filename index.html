@@ -127,6 +127,36 @@
   }
   .tinyexport:hover { opacity: .9; }
 
+  /* Support — large & flashy */
+  .support-card {
+    border: 1px solid var(--accent);
+    border-radius: 14px;
+    padding: 16px 14px;
+    text-align: center;
+    background: linear-gradient(135deg, rgba(91,140,255,.20), rgba(240,101,149,.20));
+    animation: supportGlow 3s ease-in-out infinite;
+  }
+  @keyframes supportGlow {
+    0%, 100% { box-shadow: 0 0 14px rgba(91,140,255,.22); }
+    50%      { box-shadow: 0 0 28px rgba(240,101,149,.50); }
+  }
+  .support-title {
+    font-size: 18px; font-weight: 800; letter-spacing: .3px; margin: 0 0 4px;
+    background: linear-gradient(90deg, #5b8cff, #f06595, #ffd43b);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .support-sub { font-size: 11.5px; color: var(--muted); margin-bottom: 12px; }
+  .support-btn {
+    display: block; margin-top: 9px; padding: 12px; border-radius: 10px;
+    font-weight: 700; font-size: 13.5px; color: #fff; text-decoration: none;
+    box-shadow: 0 3px 12px rgba(0,0,0,.4); transition: transform .1s, filter .15s;
+  }
+  .support-btn:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.14); }
+  .support-btn .big { display: block; font-size: 15px; }
+  .support-btn .small { display: block; font-size: 10.5px; opacity: .85; font-weight: 600; }
+  .support-btn.paypal  { background: linear-gradient(135deg, #003087, #0070ba); }
+  .support-btn.patreon { background: linear-gradient(135deg, #ff424d, #f96854); }
+
   .status {
     display: flex; align-items: center; gap: 8px; padding: 9px 10px;
     border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
@@ -165,9 +195,10 @@
   #toast.ok { border-color: var(--ok); }
 
   #minimap {
-    position: absolute; right: 10px; bottom: 10px; width: 168px; height: 168px;
+    position: absolute; right: 10px; bottom: 10px; width: 220px; height: 220px;
     border: 1px solid var(--line); border-radius: 6px; background: #0b0c10;
     cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.45);
+    image-rendering: pixelated;   /* crisp, no blur when scaling the 256px cache */
   }
   #minimap.hidden { display: none; }
 </style>
@@ -244,6 +275,7 @@
         <label for="minimapToggle">Minimap (bottom-right)</label>
         <label class="switch"><input type="checkbox" id="minimapToggle" checked><span class="slider"></span></label>
       </div>
+      <button class="btn" id="minimapPngBtn">Save minimap PNG</button>
     </div>
 
     <div class="group">
@@ -266,16 +298,21 @@
     </div>
 
     <div class="group">
-      <div class="label">Support</div>
-      <div class="hint">
-        Like the editor? Support development:<br>
-        <a href="https://paypal.me/AmethySlime" target="_blank" rel="noopener noreferrer">PayPal &middot; AmethySlime</a><br>
-        <a href="https://www.patreon.com/Amethyslime" target="_blank" rel="noopener noreferrer">Patreon &middot; Amethyslime</a>
+      <div class="support-card">
+        <div class="support-title">&#9829; Support the dev</div>
+        <div class="support-sub">Cute Defense is a one-person project. If this editor helps you, chip in!</div>
+        <a class="support-btn paypal" href="https://paypal.me/AmethySlime" target="_blank" rel="noopener noreferrer">
+          <span class="big">Donate on PayPal</span><span class="small">paypal.me/AmethySlime</span>
+        </a>
+        <a class="support-btn patreon" href="https://www.patreon.com/Amethyslime" target="_blank" rel="noopener noreferrer">
+          <span class="big">Become a Patron</span><span class="small">patreon.com/Amethyslime</span>
+        </a>
       </div>
     </div>
 
-    <!-- tiny hidden dev export: writes the Galaxy LoadXXXXXMap() script as .txt (also Ctrl+Shift+E) -->
+    <!-- tiny hidden dev exports: Galaxy script .txt (Ctrl+Shift+E) + walls-only overlay .png (Ctrl+Shift+O) -->
     <span id="galaxyExport" class="tinyexport" title="Export Galaxy script (.txt)">·</span>
+    <span id="overlayExport" class="tinyexport" title="Export walls overlay (.png)">·</span>
   </aside>
 
   <!-- ============================= CANVAS STAGE ============================= -->
@@ -303,9 +340,18 @@ let   MIN_SCALE = 1;          // recomputed from canvas size (fit-the-map zoom-o
 // edge is never buildable. Versus mode uses a fixed playable rectangle split by
 // a central black bar into two mirror-image lanes; horizontal mirror is forced.
 const BORDER = 2;
+const CORNER = 32;   // standard mode: each 32x32 map corner (e.g. 0,0..31,31) is unbuildable
 const NORMAL_AREA  = { x0: BORDER, y0: BORDER, x1: GRID - 1 - BORDER, y1: GRID - 1 - BORDER }; // [2,253]^2
 const VERSUS_AREA  = { x0: 2,   y0: 34, x1: 254, y1: 222 };
 const VERSUS_BLACK = { x0: 116, y0: 34, x1: 140, y1: 222 };  // spans the playable height exactly
+
+// Stored coordinates use a different corner of each 2x2 wall than the editor's
+// bottom-left anchor: the saved point is one cell right and one cell down (in
+// the game's frame) of the anchor. Apply on every game-facing read/write so the
+// editor and the game agree. file point = anchor + (PT_DX, PT_DY); anchor =
+// point - (PT_DX, PT_DY). (Flip a sign here if a load lands off by one.)
+const PT_DX = 1;
+const PT_DY = -1;
 
 const TILE_TYPES = ['TallShrubs', 'Flowers', 'RedFlowers', 'BlueFlowers'];
 const TYPE_COLOR = {
@@ -373,7 +419,7 @@ let viewW = 1, viewH = 1; // CSS px dimensions of the canvas
 
 // Minimap (bottom-right) + an offscreen 1px-per-cell cache of the whole map so
 // the minimap only re-renders the map image when tiles/mode change, not on pan.
-const MM = 168;            // minimap CSS size (square, matches the square map)
+const MM = 220;            // minimap CSS size (square, matches the square map)
 const minimap = document.getElementById('minimap');
 const mmCtx = minimap.getContext('2d');
 const mapCacheCanvas = document.createElement('canvas');
@@ -661,6 +707,13 @@ function markInto(buf, x, y) {
   buf[(y + 1) * GRID + (x + 1)] = 1;
 }
 
+function carveRect(x0, y0, x1, y1) {        // mark a cell rectangle unbuildable
+  const cx1 = Math.min(x1, GRID - 1), cy1 = Math.min(y1, GRID - 1);
+  for (let cy = Math.max(0, y0); cy <= cy1; cy++)
+    for (let cx = Math.max(0, x0); cx <= cx1; cx++)
+      playableBuf[cy * GRID + cx] = 0;
+}
+
 // Rebuild the playable bitmap for the current mode, then label its chambers.
 function rebuildPlayable() {
   playableBuf.fill(0);
@@ -669,10 +722,13 @@ function rebuildPlayable() {
     for (let cx = a.x0; cx <= a.x1; cx++)
       playableBuf[cy * GRID + cx] = 1;
   if (state.versus) {                       // carve out the central black divider
-    const k = VERSUS_BLACK, ky1 = Math.min(k.y1, GRID - 1), kx1 = Math.min(k.x1, GRID - 1);
-    for (let cy = k.y0; cy <= ky1; cy++)
-      for (let cx = k.x0; cx <= kx1; cx++)
-        playableBuf[cy * GRID + cx] = 0;
+    carveRect(VERSUS_BLACK.x0, VERSUS_BLACK.y0, VERSUS_BLACK.x1, VERSUS_BLACK.y1);
+  } else {                                  // standard: four 32x32 unbuildable corners
+    const C = CORNER;
+    carveRect(0, 0, C - 1, C - 1);                       // bottom-left
+    carveRect(GRID - C, 0, GRID - 1, C - 1);             // bottom-right
+    carveRect(0, GRID - C, C - 1, GRID - 1);             // top-left
+    carveRect(GRID - C, GRID - C, GRID - 1, GRID - 1);   // top-right
   }
   labelChambers();
   mapCacheDirty = true;
@@ -773,7 +829,7 @@ function buildBankXML() {
     xml += `    <Section name="${type}">\n`;
     byType[type].forEach((t, idx) => {
       xml += `        <Key name="${idx}">\n` +
-             `            <Value point="${t.x},${t.y}"/>\n` +
+             `            <Value point="${t.x + PT_DX},${t.y + PT_DY}"/>\n` +
              `        </Key>\n`;
     });
     xml += `    </Section>\n`;
@@ -786,11 +842,12 @@ function buildBankXML() {
            `        </Key>\n`;
   }
   xml += `    </Section>\n`;
-  // Mirror state (flag 1 = enabled). The brief's "Disabled Mirror" sample was
-  // the both-off case; the section name is stable and the flags carry the state.
-  xml += `    <Section name="Mirror">\n` +
-         `        <Key name="Horizontal">\n            <Value flag="${state.mirrorH ? 1 : 0}"/>\n        </Key>\n` +
-         `        <Key name="Vertical">\n            <Value flag="${state.mirrorV ? 1 : 0}"/>\n        </Key>\n` +
+  // Mirror state. The game stores this as "Disabled Mirror": flag 0 = NOT
+  // disabled = mirror ON, flag 1 = disabled = mirror OFF. (Versus is an editor
+  // extension and uses a plain flag: 1 = on.)
+  xml += `    <Section name="Disabled Mirror">\n` +
+         `        <Key name="Horizontal">\n            <Value flag="${state.mirrorH ? 0 : 1}"/>\n        </Key>\n` +
+         `        <Key name="Vertical">\n            <Value flag="${state.mirrorV ? 0 : 1}"/>\n        </Key>\n` +
          `        <Key name="Versus">\n            <Value flag="${state.versus ? 1 : 0}"/>\n        </Key>\n` +
          `    </Section>\n`;
   xml += `</Bank>\n`;
@@ -837,10 +894,11 @@ function buildGalaxyText() {
   let out = `void Load${modeName()}${state.slot}Map(){\n`;
   for (const t of placedTiles) {
     if (!inCanonical(t.x, t.y)) continue;   // the game regenerates the mirrored copies
-    if (t.type === 'TallShrubs')        out += `\tgf_InitializationMapGenerateWall(${t.x},${t.y},false,${H},${V});\n`;
-    else if (t.type === 'Flowers')      out += `\tgf_InitializationMapGenerateWall(${t.x},${t.y},true,${H},${V});\n`;
-    else if (t.type === 'RedFlowers')   out += `\tgf_InitializationMapGenerateColoredWall(${t.x},${t.y},false,${H},${V});\n`;
-    else if (t.type === 'BlueFlowers')  out += `\tgf_InitializationMapGenerateColoredWall(${t.x},${t.y},true,${H},${V});\n`;
+    const gx = t.x + PT_DX, gy = t.y + PT_DY;   // game-frame coordinate
+    if (t.type === 'TallShrubs')        out += `\tgf_InitializationMapGenerateWall(${gx},${gy},false,${H},${V});\n`;
+    else if (t.type === 'Flowers')      out += `\tgf_InitializationMapGenerateWall(${gx},${gy},true,${H},${V});\n`;
+    else if (t.type === 'RedFlowers')   out += `\tgf_InitializationMapGenerateColoredWall(${gx},${gy},false,${H},${V});\n`;
+    else if (t.type === 'BlueFlowers')  out += `\tgf_InitializationMapGenerateColoredWall(${gx},${gy},true,${H},${V});\n`;
   }
   out += `}\n`;
   return out;
@@ -851,6 +909,38 @@ function exportGalaxy() {
   toast('Exported ' + name, 'ok');
 }
 
+function downloadCanvasPng(filename, cv) {
+  const a = document.createElement('a');
+  a.href = cv.toDataURL('image/png');
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+// Full minimap image (background + walls), always 256x256.
+function saveMinimapPng() {
+  renderMapCache();                 // ensure the cache is current
+  mapCacheDirty = false;
+  const name = mapBaseName() + '_minimap.png';
+  downloadCanvasPng(name, mapCacheCanvas);
+  toast('Saved ' + name, 'ok');
+}
+// Overlay image: just the walls in gray on a transparent background, 256x256.
+// Same orientation as the minimap; true 2x2 footprints (precise occupancy).
+function buildOverlayCanvas() {
+  const cv = document.createElement('canvas');
+  cv.width = GRID; cv.height = GRID;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#8a8f98';
+  for (const t of placedTiles) c.fillRect(t.x, GRID - (t.y + 2), 2, 2);  // y-flip to match the minimap
+  return cv;
+}
+function exportOverlayPng() {
+  const name = mapBaseName() + '_overlay.png';
+  downloadCanvasPng(name, buildOverlayCanvas());
+  toast('Exported ' + name, 'ok');
+}
+
 function loadBankXML(text) {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   if (doc.querySelector('parsererror')) { toast('Load failed: not valid XML.', 'bad'); return; }
@@ -858,21 +948,25 @@ function loadBankXML(text) {
   const sections = Array.from(doc.getElementsByTagName('Section'));
   const sectionByName = name => sections.find(s => (s.getAttribute('name') || '') === name);
 
-  // Mirror flags — tolerant to the section being named "Mirror", "Disabled Mirror", etc.
+  // Mirror flags. The game's "Disabled Mirror" section is inverted (flag 0 =
+  // mirror ON). A legacy "Mirror" section uses flag 1 = ON. (Versus: plain flag.)
   let mh = false, mv = false, vs = false;
   const mirrorSec = sections.find(s => /mirror/i.test(s.getAttribute('name') || ''));
   if (mirrorSec) {
+    const inverted = /disabled/i.test(mirrorSec.getAttribute('name') || '');
+    const isOn = flag => inverted ? flag === '0' : flag === '1';
     for (const key of mirrorSec.getElementsByTagName('Key')) {
       const n = (key.getAttribute('name') || '').toLowerCase();
       const v = key.getElementsByTagName('Value')[0];
       const flag = v && v.getAttribute('flag');
-      if (n === 'horizontal') mh = flag === '1';
-      if (n === 'vertical')   mv = flag === '1';
-      if (n === 'versus')     vs = flag === '1';
+      if (n === 'horizontal') mh = isOn(flag);
+      if (n === 'vertical')   mv = isOn(flag);
+      if (n === 'versus')     vs = flag === '1';   // versus is a plain (non-disabled) flag
     }
   }
 
-  // Canonical tiles, one section per type.
+  // Canonical tiles, one section per type. The stored point is the game-frame
+  // coordinate; subtract the corner offset to get the editor's bottom-left anchor.
   const canon = [];
   for (const type of TILE_TYPES) {
     const sec = sectionByName(type);
@@ -882,8 +976,10 @@ function loadBankXML(text) {
       const pt = v && v.getAttribute('point');
       if (!pt) continue;
       const parts = pt.split(',');
-      const x = parseInt(parts[0], 10), y = parseInt(parts[1], 10);
-      if (!Number.isFinite(x) || !Number.isFinite(y) || !inBoundsAnchor(x, y)) continue;
+      const px = parseInt(parts[0], 10), py = parseInt(parts[1], 10);
+      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+      const x = px - PT_DX, y = py - PT_DY;
+      if (!inBoundsAnchor(x, y)) continue;
       canon.push({ x, y, type });
     }
   }
@@ -1129,20 +1225,20 @@ function fillWorldRect(wx0, wy0, wx1, wy1) {
   const r = worldRectToScreen(wx0, wy0, wx1, wy1);
   ctx.fillRect(r.x, r.y, r.w, r.h);
 }
-// Dim the unbuildable border / margins; paint the Versus black divider solid.
+// Versus only: dim the out-of-play margins and paint the central black divider.
+// Standard mode is NOT dimmed (the border/corners are simply not buildable).
 function drawUnbuildable() {
-  const a = state.versus ? VERSUS_AREA : NORMAL_AREA;
+  if (!state.versus) return;
+  const a = VERSUS_AREA;
   const px0 = a.x0, py0 = a.y0, px1 = a.x1 + 1, py1 = a.y1 + 1;  // playable world edges
   ctx.fillStyle = 'rgba(8,9,12,0.70)';
   fillWorldRect(0, 0, GRID, py0);          // bottom margin
   fillWorldRect(0, py1, GRID, GRID);       // top margin
   fillWorldRect(0, py0, px0, py1);         // left margin
   fillWorldRect(px1, py0, GRID, py1);      // right margin
-  if (state.versus) {
-    const k = VERSUS_BLACK;
-    ctx.fillStyle = '#000';
-    fillWorldRect(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID));
-  }
+  const k = VERSUS_BLACK;
+  ctx.fillStyle = '#000';
+  fillWorldRect(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID));
 }
 
 // --- Minimap ---------------------------------------------------------------
@@ -1158,15 +1254,15 @@ function renderMapCache() {
   mcFill(HALF, 0, GRID, HALF, '#268a3e');    // bottom-right green
   mcFill(0, HALF, HALF, GRID, '#caa01f');    // top-left yellow
   mcFill(HALF, HALF, GRID, GRID, '#c22f2f'); // top-right red
-  mcFill(0, 0, GRID, GRID, 'rgba(0,0,0,0.18)');
-  for (const t of placedTiles) mcFill(t.x, t.y, t.x + 2, t.y + 2, TYPE_COLOR[t.type]);
-  const a = state.versus ? VERSUS_AREA : NORMAL_AREA;
-  const dim = 'rgba(8,9,12,0.72)';
-  mcFill(0, 0, GRID, a.y0, dim);             // bottom margin
-  mcFill(0, a.y1 + 1, GRID, GRID, dim);      // top margin
-  mcFill(0, a.y0, a.x0, a.y1 + 1, dim);      // left margin
-  mcFill(a.x1 + 1, a.y0, GRID, a.y1 + 1, dim); // right margin
-  if (state.versus) {
+  mcFill(0, 0, GRID, GRID, 'rgba(0,0,0,0.45)');  // darken so walls stand out
+  // walls in brightened type colours for contrast
+  for (const t of placedTiles) mcFill(t.x, t.y, t.x + 2, t.y + 2, shade(TYPE_COLOR[t.type], 0.3));
+  if (state.versus) {                        // dim margins + black divider (standard is not dimmed)
+    const a = VERSUS_AREA, dim = 'rgba(8,9,12,0.72)';
+    mcFill(0, 0, GRID, a.y0, dim);
+    mcFill(0, a.y1 + 1, GRID, GRID, dim);
+    mcFill(0, a.y0, a.x0, a.y1 + 1, dim);
+    mcFill(a.x1 + 1, a.y0, GRID, a.y1 + 1, dim);
     const k = VERSUS_BLACK;
     mcFill(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID), '#000');
   }
@@ -1386,7 +1482,8 @@ function onKeyDown(e) {
     if (k === 's') { e.preventDefault(); saveMap(); }
     else if (k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if (k === 'y') { e.preventDefault(); redo(); }
-    else if (k === 'e' && e.shiftKey) { e.preventDefault(); exportGalaxy(); }  // hidden Galaxy export
+    else if (k === 'e' && e.shiftKey) { e.preventDefault(); exportGalaxy(); }   // hidden Galaxy export
+    else if (k === 'o' && e.shiftKey) { e.preventDefault(); exportOverlayPng(); } // hidden overlay PNG export
     return;
   }
   switch (e.key.toLowerCase()) {
@@ -1580,7 +1677,9 @@ function init() {
   document.getElementById('saveBtn').addEventListener('click', saveMap);
   document.getElementById('clearBtn').addEventListener('click', clearMap);
   document.getElementById('loadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
-  document.getElementById('galaxyExport').addEventListener('click', exportGalaxy);  // tiny hidden dev export
+  document.getElementById('minimapPngBtn').addEventListener('click', saveMinimapPng);
+  document.getElementById('galaxyExport').addEventListener('click', exportGalaxy);   // tiny hidden dev export
+  document.getElementById('overlayExport').addEventListener('click', exportOverlayPng);
 
   // minimap: toggle + click/drag to jump
   document.getElementById('minimapToggle').addEventListener('change', e => setMinimap(e.target.checked));
