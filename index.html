@@ -384,13 +384,13 @@ const SP_SIZE = 1;            // Spawner footprint (1x1)
 const SP_COLOR = '#f06595';   // pink
 const SPAWNER_CAP = 8;
 
-// Stored coordinates use a different corner of each 2x2 wall than the editor's
-// bottom-left anchor: the saved point is one cell to the right (no y shift) of
-// the anchor. Apply on every game-facing read/write so the editor and the game
-// agree. file point = anchor + (PT_DX, PT_DY); anchor = point - (PT_DX, PT_DY).
+// The editor anchors a 2x2 wall at its bottom-left cell; the game stores the wall
+// by its TOP-LEFT tile, which is one row up (y+1), plus the established +1 x
+// offset. Apply on every game-facing read/write so the editor and game agree.
+// file point = anchor + (PT_DX, PT_DY); anchor = point - (PT_DX, PT_DY).
 // (Adjust a value here if a load lands off by one.)
 const PT_DX = 1;
-const PT_DY = 0;
+const PT_DY = 1;
 
 const TILE_TYPES = ['TallShrubs', 'Flowers', 'RedFlowers', 'BlueFlowers'];
 const TYPE_COLOR = {
