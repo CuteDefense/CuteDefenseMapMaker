@@ -1,0 +1,42 @@
+# `presets/` — read-only map presets for the editor
+
+Drop `.SC2Bank` save files here to use them as **presets** in the Cute Defense
+map editor (`tools/cutedefense-map-editor.html`). Presets load read-only — the
+editor never writes back to this folder, so a preset can never be saved over.
+
+## Naming convention
+
+```
+<Mode> - <Map Name>.SC2Bank
+```
+
+`<Mode>` must be one of the editor's mode labels (case-insensitive); `<Map Name>`
+is free text. The first ` - ` separates the two. Examples:
+
+```
+Standard - Crossroads.SC2Bank
+Duos Versus - Twin Lanes.SC2Bank
+Tug of War - Big Push.SC2Bank
+Tower Defense - Spiral.SC2Bank
+```
+
+Valid `<Mode>` labels: `Standard`, `Versus`, `Duos Versus`, `Quick`, `Attrition`,
+`Horde`, `Maze Wars`, `Tower Defense`, `Tug of War`.
+
+Files that don't match this pattern (e.g. the editor's own
+`CustomCuteDefenseMap<Mode><Slot>.SC2Bank` exports) are ignored by the preset
+picker.
+
+## How to use
+
+1. In the editor sidebar, under **Presets**, click **Choose presets folder…**
+   and pick this folder.
+2. Pick a map from the **Preset** dropdown and click **Load preset (read-only)**.
+   The editor switches to the preset's mode and loads its layout.
+3. To save your own edits, use **Save .SC2Bank** as usual — it downloads a fresh
+   `CustomCuteDefenseMap<Mode><Slot>.SC2Bank`, leaving the preset untouched.
+
+The editor is an offline `file://` page, so it can't watch the folder; you pick
+it once per session (the browser doesn't persist `file://` folder access).
+
+These `.SC2Bank` files are not gitignored — commit any presets you want to share.
