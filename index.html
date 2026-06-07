@@ -297,6 +297,18 @@
     </div>
 
     <div class="group">
+      <div class="label">Presets</div>
+      <button class="btn" id="presetFolderBtn">Choose presets folder&hellip;</button>
+      <div class="slotrow">
+        <span class="slotlbl">Preset</span>
+        <select id="presetSelect" class="select slotsel" disabled><option>&mdash; no folder &mdash;</option></select>
+      </div>
+      <button class="btn" id="loadPresetBtn" disabled>Load preset (read-only)</button>
+      <div class="hint">Drop <code>&lt;Mode&gt; - &lt;Map Name&gt;.SC2Bank</code> files in a folder (e.g. the repo's <code>presets/</code>), pick it here, then load. Presets are read-only &mdash; Save always writes a fresh <code>CustomCuteDefenseMap&hellip;</code> file, so a preset is never saved over.</div>
+      <input type="file" id="presetInput" webkitdirectory hidden>
+    </div>
+
+    <div class="group">
       <div class="label">View</div>
       <div class="toggle">
         <label for="minimapToggle">Minimap (bottom-right)</label>
@@ -377,7 +389,7 @@ let   MIN_SCALE = 1;          // recomputed from canvas size (fit-the-map zoom-o
 // edge is never buildable. Versus mode uses a fixed playable rectangle split by
 // a central black bar into two mirror-image lanes; horizontal mirror is forced.
 const BORDER = 2;
-const CORNER = 32;   // standard mode: each 32x32 map corner (e.g. 0,0..31,31) is unbuildable
+const CORNER = 32;   // corners:true modes carve each 32x32 map corner (e.g. 0,0..31,31) unbuildable (none on by default)
 const NORMAL_AREA  = { x0: BORDER, y0: BORDER, x1: GRID - 1 - BORDER, y1: GRID - 1 - BORDER }; // [2,253]^2
 const VERSUS_AREA  = { x0: 2,   y0: 34, x1: 253, y1: 221 };   // top-right corner = 253,221
 const VERSUS_BLACK = { x0: 116, y0: 34, x1: 139, y1: 221 };   // central divider (x to 139, symmetric about 127.5); top lowered
@@ -411,13 +423,13 @@ const TOW_SPAWNER_DEFAULTS = [{ x: 6, y: 104 }, { x: 6, y: 151 }];
 // Game modes. forceH/forceV = mirrors locked on; allowSpawner gates the 1x1
 // spawner; psDefault is the canonical Player-Spawner anchor; area = playable
 // (walkable) rectangle; bars = extra unplayable rectangles; corners = carve the
-// 32x32 map corners (standard only); dim = shade out-of-play margins; buildMargin
+// 32x32 map corners (off by default); dim = shade out-of-play margins; buildMargin
 // = a no-build ring (cells) inside the playable area (walkable but not buildable).
 // psMulti (Maze Wars) = N independent player spawners (no mirror orbit) seeded
 // from psDefaults; lanes + cornerInset mark the 5th cell in from each lane corner
 // unbuildable.
 const MODES = {
-  standard: { label: 'Standard',    forceH: false, forceV: false, allowSpawner: true,  psDefault: { x: 126, y: 126 }, area: NORMAL_AREA, bars: [],                          corners: true,  dim: false, buildMargin: 0 },
+  standard: { label: 'Standard',    forceH: false, forceV: false, allowSpawner: true,  psDefault: { x: 126, y: 126 }, area: NORMAL_AREA, bars: [],                          corners: false, dim: true,  buildMargin: 0 },
   versus:   { label: 'Versus',      forceH: false, forceV: true,  allowSpawner: false, psDefault: { x: 56,  y: 126 }, area: VERSUS_AREA, bars: [VERSUS_BLACK],               corners: false, dim: true,  buildMargin: 0 },
   duos:     { label: 'Duos Versus', forceH: true,  forceV: true,  allowSpawner: false, psDefault: { x: 56,  y: 71  }, area: VERSUS_AREA, bars: [VERSUS_BLACK, DUOS_BLACK_H], corners: false, dim: true,  buildMargin: 0 },
   quick:    { label: 'Quick',       forceH: false, forceV: false, noH: true,  allowSpawner: true,  psDefault: { x: 126, y: 126 }, area: QUICK_AREA,  bars: [],                          corners: false, dim: true,  buildMargin: 0 },  // 4x4 anchor 126 -> centred on 128,128; H mirror disabled
@@ -446,6 +458,12 @@ const STRUCT_DEFS = {
   Tower:    { size: 6, color: '#ff922b', modes: ['tow'], glyph: 'T' },
   Merchant: { size: 4, color: '#a61e4d', modes: ['horde', 'tow'], glyph: 'Me' },
   Market:   { size: 4, color: '#5c940d', modes: ['horde', 'tow'], glyph: 'Mk', galaxy: 'Marketplace' },  // game type name differs
+  // noMirror: independent placements — never mirrored, every copy is canonical (so all
+  // export even with a mirror on). cap = max count. spawnPoint = export as
+  // gf_InitializationMapSpawnPoint<Type>(centreX,centreY,id) with id 0..cap-1 instead of
+  // a building. Cutemental's 30x30 footprint is walkable (pathable) but blocks building,
+  // like every structure.
+  Cutemental: { size: 30, color: '#9c36b5', modes: ['standard', 'quick'], glyph: 'Cu', noMirror: true, cap: 5, spawnPoint: true },
 };
 const isStructureType = t => !!STRUCT_DEFS[t];
 // Structure types allowed to overlap the player spawner (Castle stacks on it).
@@ -481,6 +499,7 @@ const PALETTE = [
   { type: 'Tower',         label: 'Tower',          color: STRUCT_DEFS.Tower.color,    structure: true, modes: STRUCT_DEFS.Tower.modes },
   { type: 'Merchant',      label: 'Merchant',       color: STRUCT_DEFS.Merchant.color, structure: true, modes: STRUCT_DEFS.Merchant.modes },
   { type: 'Market',        label: 'Market',         color: STRUCT_DEFS.Market.color,   structure: true, modes: STRUCT_DEFS.Market.modes },
+  { type: 'Cutemental',    label: 'Cutemental',     color: STRUCT_DEFS.Cutemental.color, structure: true, modes: STRUCT_DEFS.Cutemental.modes },
 ];
 // A palette item is visible only in its modes (walls/spawners are mode-agnostic).
 const paletteVisible = item => !item.modes || item.modes.includes(state.gameMode);
@@ -792,7 +811,11 @@ function objOrbit(x, y, size, useH, useV) {
 // Player Spawner orbits ONLY on the mode's FORCED mirror (one per lane/team), never
 // the manual toggles — no-lane modes keep a single spawner. forcedMirrorOnly
 // structures (Castle) use the same rule; other objects follow the effective mirror.
-function structMirror(def) { return def.forcedMirrorOnly ? [forcedH(), forcedV()] : [state.mirrorH, state.mirrorV]; }
+function structMirror(def) { return def.noMirror ? [false, false] : def.forcedMirrorOnly ? [forcedH(), forcedV()] : [state.mirrorH, state.mirrorV]; }
+// Which copies of a structure are canonical (= saved / exported): noMirror types keep
+// EVERY copy (independent placements, no reflection); forcedMirrorOnly keys off the
+// forced mirror; the rest off the effective mirror.
+function structCanonFn(def) { return def.noMirror ? (() => true) : def.forcedMirrorOnly ? inCanonicalForced : inCanonical; }
 function psOrbit(x, y) { return objOrbit(x, y, PS_SIZE, forcedH(), forcedV()); }
 // Place / move the Player Spawner. Default modes have a single spawner (+ forced
 // mirrors); psMulti modes (Maze Wars) place independent spawners up to the cap.
@@ -833,6 +856,7 @@ function placeSpawner(cellX, cellY) {
 function placeStructure(type, cellX, cellY) {
   const def = STRUCT_DEFS[type];
   if (!def || (def.modes && !def.modes.includes(state.gameMode))) return false;
+  if (def.cap && structures.filter(s => s.type === type).length >= def.cap) return false;  // capped count (Cutemental: 5 -> ids 0..4)
   const sz = def.size;
   const ax = clamp(cellX - (sz >> 1), 0, GRID - sz);
   const ay = clamp(cellY - (sz >> 1), 0, GRID - sz);
@@ -907,9 +931,10 @@ function resyncSpawnersForMode() {
     const def = STRUCT_DEFS[ty];
     if (def.modes && !def.modes.includes(state.gameMode)) continue;
     const [mh, mv] = structMirror(def);
-    const canonOf = def.forcedMirrorOnly ? inCanonicalForced : inCanonical;
+    const canonOf = structCanonFn(def);
     let srcs = structures.filter(s => s.type === ty && canonOf(s.x, s.y));
     if (def.single) srcs = srcs.slice(0, 1);
+    else if (def.cap) srcs = srcs.slice(0, def.cap);
     const seen = new Set();
     for (const s of srcs) for (const p of objOrbit(s.x, s.y, def.size, mh, mv)) {
       const k = p.x + ',' + p.y;
@@ -1033,9 +1058,10 @@ function remirrorObjects(srcLowX, srcLowY) {
     return out;
   };
   spawners = rebuild(spawners, () => SP_SIZE, (o, p) => ({ x: p.x, y: p.y })).slice(0, SPAWNER_CAP);
-  const forced = structures.filter(s => STRUCT_DEFS[s.type].forcedMirrorOnly);   // Castle: untouched by manual mirror
-  const effective = rebuild(structures.filter(s => !STRUCT_DEFS[s.type].forcedMirrorOnly), o => STRUCT_DEFS[o.type].size, (o, p) => ({ type: o.type, x: p.x, y: p.y }));
-  structures = forced.concat(effective);
+  const noMirror = s => { const d = STRUCT_DEFS[s.type]; return d.forcedMirrorOnly || d.noMirror; };  // Castle + Cutemental: untouched by a manual mirror
+  const untouched = structures.filter(noMirror);
+  const effective = rebuild(structures.filter(s => !noMirror(s)), o => STRUCT_DEFS[o.type].size, (o, p) => ({ type: o.type, x: p.x, y: p.y }));
+  structures = untouched.concat(effective);
 }
 
 // Rebuild the map from the chosen source half, reflecting across the active mirrors.
@@ -1137,7 +1163,7 @@ function rebuildPlayable() {
     for (let cx = a.x0; cx <= a.x1; cx++)
       playableBuf[cy * GRID + cx] = 1;
   for (const bar of cfg.bars) carveRect(bar.x0, bar.y0, bar.x1, bar.y1);   // central dividers
-  if (cfg.corners) {                        // standard: four 32x32 unbuildable corners
+  if (cfg.corners) {                        // corners:true -> four 32x32 unbuildable corners
     const C = CORNER;
     carveRect(0, 0, C - 1, C - 1);                       // bottom-left
     carveRect(GRID - C, 0, GRID - 1, C - 1);             // bottom-right
@@ -1419,7 +1445,7 @@ function buildBankXML() {
   const structTypes = Object.keys(STRUCT_DEFS);
   const structCanon = {};
   for (const ty of structTypes) {
-    const canonOf = STRUCT_DEFS[ty].forcedMirrorOnly ? inCanonicalForced : inCanonical;
+    const canonOf = structCanonFn(STRUCT_DEFS[ty]);
     structCanon[ty] = structures.filter(s => s.type === ty && canonOf(s.x, s.y));
   }
   // Section of {x,y} anchors stored as the object's CENTRE point (anchor + size/2).
@@ -1469,6 +1495,17 @@ function modeFromFilename(filename) {
   if (!m) return null;
   const tag = m[1].toLowerCase();
   return Object.keys(MODES).find(k => MODES[k].label.replace(/\s+/g, '').toLowerCase() === tag) || null;
+}
+// Preset filename convention: "<Mode> - <Map Name>.SC2Bank" (e.g.
+// "Duos Versus - Crossroads.SC2Bank"). <Mode> is the human label; the first " - "
+// separates it from the free-text map name. Returns {mode,mapName} or null when the
+// leading token isn't a known mode label.
+function parsePresetName(filename) {
+  const m = filename && /^(.+?)\s+-\s+(.+)\.(?:SC2Bank|xml)$/i.exec(filename);
+  if (!m) return null;
+  const want = m[1].trim().toLowerCase();
+  const mode = Object.keys(MODES).find(k => MODES[k].label.toLowerCase() === want) || null;
+  return mode ? { mode, mapName: m[2].trim() } : null;
 }
 
 function downloadFile(filename, text, mime) {
@@ -1523,10 +1560,18 @@ function buildGalaxyText(team1Ps) {
     `\tgf_InitializationMapGenerateBuilding("${type}",${ax + ptOffset(size)},${ay + ptOffset(size)},${mh ? 'true' : 'false'},${mv ? 'true' : 'false'});\n`;
   for (const s of spawners)                       // 1x1 Spawner -> effective mirror
     if (inCanonical(s.x, s.y)) out += bld('Spawner', s.x, s.y, SP_SIZE, state.mirrorH, state.mirrorV);
-  for (const s of structures) {                   // Castle/Fountain/Tower/Merchant/Market
+  // spawnPoint structures (Cutemental) emit gf_InitializationMapSpawnPoint<Type>(cx,cy,id)
+  // with a per-type id (0..cap-1); they never mirror, so every copy is exported.
+  const spawnPointId = {};
+  for (const s of structures) {                   // Castle/Fountain/Tower/Merchant/Market/Cutemental
     const def = STRUCT_DEFS[s.type];
-    const canon = def.forcedMirrorOnly ? inCanonicalForced : inCanonical;
-    if (!canon(s.x, s.y)) continue;
+    if (!structCanonFn(def)(s.x, s.y)) continue;
+    if (def.spawnPoint) {
+      const id = spawnPointId[s.type] = (spawnPointId[s.type] ?? 0);
+      spawnPointId[s.type]++;
+      out += `\tgf_InitializationMapSpawnPoint${s.type}(${s.x + ptOffset(def.size)},${s.y + ptOffset(def.size)},${id});\n`;
+      continue;
+    }
     const [mh, mv] = structMirror(def);
     out += bld(def.galaxy || s.type, s.x, s.y, def.size, mh, mv);
   }
@@ -1650,7 +1695,7 @@ function parseBank(text) {
   return data;
 }
 
-function loadBankXML(text, filename) {
+function loadBankXML(text, filename, modeHint) {
   const data = parseBank(text);
 
   // Stored points are the object's CENTRE; subtract size/2 to get the editor's
@@ -1669,9 +1714,10 @@ function loadBankXML(text, filename) {
   placedTiles = [];
   tileAt.clear();
   occ.fill(0);
-  // Switch to the mode named in the filename (CustomCuteDefenseMap<Mode><Slot>) so
-  // the playable area + forced mirrors match; otherwise load as a mirrored standard map.
-  const detected = modeFromFilename(filename);
+  // Switch to the mode for this map (explicit hint from a preset, else parsed from the
+  // CustomCuteDefenseMap<Mode><Slot> or "<Mode> - <Map Name>" filename) so the playable
+  // area + forced mirrors match; otherwise load as a mirrored standard map.
+  const detected = modeHint || modeFromFilename(filename) || (parsePresetName(filename) || {}).mode || null;
   state.gameMode = detected || 'standard';
   state.versus = state.gameMode !== 'standard';
   const cfg = MODES[state.gameMode];
@@ -1708,6 +1754,7 @@ function loadBankXML(text, filename) {
   structures = [];
   for (const p of data.structs) {
     const def = STRUCT_DEFS[p.type]; if (!def || (def.modes && !def.modes.includes(state.gameMode))) continue;
+    if (def.cap && structures.filter(s => s.type === p.type).length >= def.cap) continue;  // honour the count cap
     const x = p.px - ptOffset(def.size), y = p.py - ptOffset(def.size);
     if (x < 0 || y < 0 || x > GRID - def.size || y > GRID - def.size) continue;
     const [smh, smv] = structMirror(def);
@@ -1721,6 +1768,57 @@ function loadBankXML(text, filename) {
   requestRender();
   updateMeta();
   toast(`Loaded ${placedTiles.length} walls` + (detected ? ` · ${cfg.label}` : ''), 'ok');
+}
+
+/* ---- Presets: load read-only .SC2Bank files from a chosen folder ----------
+ * The editor runs offline from a file:// page and can't watch a directory, so the
+ * user points a directory input at a folder of "<Mode> - <Map Name>.SC2Bank" files.
+ * We list the matching ones and load the chosen file READ-ONLY: there is no write
+ * path back to the folder (Save only ever downloads a CustomCuteDefenseMap… file),
+ * so a preset can never be saved over.
+ * ------------------------------------------------------------------------- */
+let presetFiles = [];   // [{file, name, mode, mapName}] discovered in the chosen folder
+
+function onPresetFolder(e) {
+  presetFiles = Array.from(e.target.files || [])
+    .map(f => ({ f, info: parsePresetName(f.name) }))
+    .filter(x => x.info)                                  // keep only well-named presets
+    .map(x => ({ file: x.f, name: x.f.name, mode: x.info.mode, mapName: x.info.mapName }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  populatePresetSelect();
+  e.target.value = '';                                   // allow re-picking the same folder
+  toast(presetFiles.length
+    ? `Found ${presetFiles.length} preset${presetFiles.length === 1 ? '' : 's'}`
+    : 'No "<Mode> - <Map Name>.SC2Bank" presets in that folder', presetFiles.length ? 'ok' : 'bad');
+}
+function populatePresetSelect() {
+  const sel = document.getElementById('presetSelect');
+  const btn = document.getElementById('loadPresetBtn');
+  sel.innerHTML = '';
+  if (!presetFiles.length) {
+    sel.innerHTML = '<option>— no presets —</option>';
+    sel.disabled = true; btn.disabled = true; return;
+  }
+  const ph = document.createElement('option');
+  ph.value = ''; ph.textContent = '— choose preset —';
+  sel.appendChild(ph);
+  presetFiles.forEach((p, i) => {
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = `${MODES[p.mode].label} · ${p.mapName}`;
+    sel.appendChild(o);
+  });
+  sel.disabled = false; btn.disabled = false;
+}
+function loadSelectedPreset() {
+  const sel = document.getElementById('presetSelect');
+  const i = parseInt(sel.value, 10);
+  const p = (i >= 0 && i < presetFiles.length) ? presetFiles[i] : null;
+  if (!p) { toast('Pick a preset first', 'bad'); return; }
+  const reader = new FileReader();
+  reader.onload = () => loadBankXML(String(reader.result), p.name, p.mode);
+  reader.onerror = () => toast('Could not read preset file', 'bad');
+  reader.readAsText(p.file);
 }
 
 /* ===========================================================================
@@ -2153,7 +2251,7 @@ function fillWorldRect(wx0, wy0, wx1, wy1) {
   ctx.fillRect(r.x, r.y, r.w, r.h);
 }
 // Restricted modes (dim=true): shade the out-of-play margins and paint dividers.
-// Standard is NOT dimmed (the border/corners are simply not buildable).
+// Standard is dimmed too — its 2-cell unbuildable border greys out (corners build).
 function drawUnbuildable() {
   const cfg = MODES[state.gameMode];
   if (!cfg.dim) return;
@@ -2324,7 +2422,8 @@ function drawStructureGhost() {
   const ignore = def.single ? [state.type] : [];
   const [mh, mv] = structMirror(def);
   const pts = objOrbit(ax, ay, sz, mh, mv);
-  const ok = pts.every(p => objectFits(p.x, p.y, sz, !!def.stacksPS, ignore));
+  const underCap = !def.cap || structures.filter(s => s.type === state.type).length < def.cap;
+  const ok = underCap && pts.every(p => objectFits(p.x, p.y, sz, !!def.stacksPS, ignore));
   for (const p of pts) objGhost(p.x, p.y, sz, ok, def.color);
 }
 
@@ -2663,7 +2762,7 @@ function toast(msg, kind) {
 }
 
 function clearMap() {
-  if (!placedTiles.length && !spawners.length) { toast('Map is already empty', 'ok'); return; }
+  if (!placedTiles.length && !spawners.length && !structures.length) { toast('Map is already empty', 'ok'); return; }
   commitHistory(snapshot());
   placedTiles = [];
   tileAt.clear();
@@ -2742,6 +2841,9 @@ function init() {
   document.getElementById('saveBtn').addEventListener('click', saveMap);
   document.getElementById('clearBtn').addEventListener('click', clearMap);
   document.getElementById('loadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+  document.getElementById('presetFolderBtn').addEventListener('click', () => document.getElementById('presetInput').click());
+  document.getElementById('presetInput').addEventListener('change', onPresetFolder);
+  document.getElementById('loadPresetBtn').addEventListener('click', loadSelectedPreset);
   document.getElementById('copyBtn').addEventListener('click', copySelection);
   document.getElementById('cutBtn').addEventListener('click', cutSelection);
   document.getElementById('pasteBtn').addEventListener('click', pasteClipboard);
