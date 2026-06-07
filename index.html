@@ -298,14 +298,11 @@
 
     <div class="group">
       <div class="label">Presets</div>
-      <button class="btn" id="presetFolderBtn">Choose presets folder&hellip;</button>
       <div class="slotrow">
         <span class="slotlbl">Preset</span>
-        <select id="presetSelect" class="select slotsel" disabled><option>&mdash; no folder &mdash;</option></select>
+        <select id="presetSelect" class="select slotsel" disabled><option>&mdash; scanning&hellip; &mdash;</option></select>
       </div>
-      <button class="btn" id="loadPresetBtn" disabled>Load preset (read-only)</button>
-      <div class="hint">Drop <code>&lt;Mode&gt; - &lt;Map Name&gt;.SC2Bank</code> files in a folder (e.g. the repo's <code>presets/</code>), pick it here, then load. Presets are read-only &mdash; Save always writes a fresh <code>CustomCuteDefenseMap&hellip;</code> file, so a preset is never saved over.</div>
-      <input type="file" id="presetInput" webkitdirectory hidden>
+      <div class="hint">Auto-detected read-only from a <code>presets/</code> folder beside this page (files named <code>&lt;Mode&gt; - &lt;Map Name&gt;.SC2Bank</code>); pick one to load it. Works when the page is <b>served over http(s)</b> &mdash; GitHub Pages (lists via the GitHub API), or <code>python -m http.server</code> locally. A double-clicked <code>file://</code> page can't read the folder. Saving never writes here, so a preset is never saved over.</div>
     </div>
 
     <div class="group">
@@ -1770,37 +1767,84 @@ function loadBankXML(text, filename, modeHint) {
   toast(`Loaded ${placedTiles.length} walls` + (detected ? ` · ${cfg.label}` : ''), 'ok');
 }
 
-/* ---- Presets: load read-only .SC2Bank files from a chosen folder ----------
- * The editor runs offline from a file:// page and can't watch a directory, so the
- * user points a directory input at a folder of "<Mode> - <Map Name>.SC2Bank" files.
- * We list the matching ones and load the chosen file READ-ONLY: there is no write
- * path back to the folder (Save only ever downloads a CustomCuteDefenseMap… file),
- * so a preset can never be saved over.
+/* ---- Presets: auto-detect a read-only "presets/" folder beside this page -----
+ * On startup we scan a "presets/" folder that sits next to the HTML for files named
+ * "<Mode> - <Map Name>.SC2Bank" and list them in the dropdown; picking one loads it.
+ * Discovery tries, in order: the GitHub contents API (when hosted on GitHub Pages,
+ * which serves no directory index of its own), a served directory index (e.g.
+ * python's http.server autoindex), then an optional presets/presets.json manifest.
+ * It needs the page SERVED over http(s) — a double-clicked file:// page in Chrome/Edge
+ * can't read a folder. Either way it is READ-ONLY: there is no write path back (Save
+ * only downloads a CustomCuteDefenseMap… file), so a preset is never saved over.
  * ------------------------------------------------------------------------- */
-let presetFiles = [];   // [{file, name, mode, mapName}] discovered in the chosen folder
+let presetFiles = [];   // [{url, name, mode, mapName}] discovered under presets/
 
-function onPresetFolder(e) {
-  presetFiles = Array.from(e.target.files || [])
-    .map(f => ({ f, info: parsePresetName(f.name) }))
+// GET a URL as text. fetch first; fall back to XMLHttpRequest (which can read some
+// file:// siblings, e.g. in Firefox). Resolves to null on any failure.
+function fetchText(url) {
+  return fetch(url, { cache: 'no-store' })
+    .then(r => (r.ok ? r.text() : null))
+    .catch(() => new Promise(res => {
+      try {
+        const x = new XMLHttpRequest();
+        x.open('GET', url, true);
+        x.onload = () => res((x.status === 0 || (x.status >= 200 && x.status < 300)) ? x.responseText : null);
+        x.onerror = () => res(null);
+        x.send();
+      } catch (e) { res(null); }
+    }));
+}
+// Derive {owner, repo} when this page is hosted on GitHub Pages, so we can list the
+// presets/ folder via the GitHub contents API (Pages serves no directory index).
+// Handles user/org pages (owner.github.io) and project pages (owner.github.io/<repo>)
+// with the page at the served root. Returns null when not on github.io.
+function githubPagesRepo() {
+  const h = location.hostname;
+  if (!/\.github\.io$/i.test(h)) return null;
+  const owner = h.replace(/\.github\.io$/i, '');
+  const base = location.pathname.replace(/[^/]*$/, '');     // the page's own directory = the site root
+  const seg = base.split('/').filter(Boolean);
+  return { owner, repo: seg.length ? seg[0] : `${owner}.github.io` };
+}
+async function discoverPresets() {
+  let names = [];
+  // 1) GitHub Pages (no directory index): ask the GitHub contents API to list presets/
+  //    so dropping a correctly-named file in the repo is all it takes.
+  const gh = githubPagesRepo();
+  if (gh) {
+    const json = await fetchText(`https://api.github.com/repos/${gh.owner}/${gh.repo}/contents/presets`);
+    if (json) { try { const a = JSON.parse(json); if (Array.isArray(a)) names = a.filter(e => e && e.type === 'file').map(e => e.name); } catch (e) {} }
+  }
+  // 2) a served directory index (e.g. python -m http.server autoindex)
+  if (!names.length) {
+    const html = await fetchText('presets/');
+    if (html) {
+      const set = new Set(); const re = /href="([^"?#]+\.SC2Bank)"/gi; let m;
+      while ((m = re.exec(html))) set.add(decodeURIComponent(m[1].split('/').pop()));
+      names = [...set];
+    }
+  }
+  // 3) optional presets/presets.json manifest (["<Mode> - <Map>.SC2Bank", ...])
+  if (!names.length) {
+    const manifest = await fetchText('presets/presets.json');
+    if (manifest) { try { const j = JSON.parse(manifest); names = Array.isArray(j) ? j : (Array.isArray(j.presets) ? j.presets : []); } catch (e) {} }
+  }
+  presetFiles = names
+    .map(n => ({ name: n, info: parsePresetName(n) }))
     .filter(x => x.info)                                  // keep only well-named presets
-    .map(x => ({ file: x.f, name: x.f.name, mode: x.info.mode, mapName: x.info.mapName }))
+    .map(x => ({ url: 'presets/' + encodeURIComponent(x.name), name: x.name, mode: x.info.mode, mapName: x.info.mapName }))
     .sort((a, b) => a.name.localeCompare(b.name));
   populatePresetSelect();
-  e.target.value = '';                                   // allow re-picking the same folder
-  toast(presetFiles.length
-    ? `Found ${presetFiles.length} preset${presetFiles.length === 1 ? '' : 's'}`
-    : 'No "<Mode> - <Map Name>.SC2Bank" presets in that folder', presetFiles.length ? 'ok' : 'bad');
 }
 function populatePresetSelect() {
   const sel = document.getElementById('presetSelect');
-  const btn = document.getElementById('loadPresetBtn');
   sel.innerHTML = '';
   if (!presetFiles.length) {
-    sel.innerHTML = '<option>— no presets —</option>';
-    sel.disabled = true; btn.disabled = true; return;
+    sel.innerHTML = '<option>— no presets found —</option>';
+    sel.disabled = true; return;
   }
   const ph = document.createElement('option');
-  ph.value = ''; ph.textContent = '— choose preset —';
+  ph.value = ''; ph.textContent = `— choose preset (${presetFiles.length}) —`;
   sel.appendChild(ph);
   presetFiles.forEach((p, i) => {
     const o = document.createElement('option');
@@ -1808,17 +1852,17 @@ function populatePresetSelect() {
     o.textContent = `${MODES[p.mode].label} · ${p.mapName}`;
     sel.appendChild(o);
   });
-  sel.disabled = false; btn.disabled = false;
+  sel.disabled = false;
 }
 function loadSelectedPreset() {
   const sel = document.getElementById('presetSelect');
   const i = parseInt(sel.value, 10);
   const p = (i >= 0 && i < presetFiles.length) ? presetFiles[i] : null;
-  if (!p) { toast('Pick a preset first', 'bad'); return; }
-  const reader = new FileReader();
-  reader.onload = () => loadBankXML(String(reader.result), p.name, p.mode);
-  reader.onerror = () => toast('Could not read preset file', 'bad');
-  reader.readAsText(p.file);
+  if (!p) return;
+  fetchText(p.url).then(text => {
+    if (text == null) { toast('Could not read preset (serve the folder over http?)', 'bad'); return; }
+    loadBankXML(text, p.name, p.mode);
+  });
 }
 
 /* ===========================================================================
@@ -2841,9 +2885,7 @@ function init() {
   document.getElementById('saveBtn').addEventListener('click', saveMap);
   document.getElementById('clearBtn').addEventListener('click', clearMap);
   document.getElementById('loadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
-  document.getElementById('presetFolderBtn').addEventListener('click', () => document.getElementById('presetInput').click());
-  document.getElementById('presetInput').addEventListener('change', onPresetFolder);
-  document.getElementById('loadPresetBtn').addEventListener('click', loadSelectedPreset);
+  document.getElementById('presetSelect').addEventListener('change', loadSelectedPreset);  // load on pick (no button)
   document.getElementById('copyBtn').addEventListener('click', copySelection);
   document.getElementById('cutBtn').addEventListener('click', cutSelection);
   document.getElementById('pasteBtn').addEventListener('click', pasteClipboard);
@@ -2893,6 +2935,7 @@ function init() {
   updateUndoButtons();
   updateSelectionButtons();
   requestRender();
+  discoverPresets();          // scan presets/ beside this page (no-op unless served over http)
 }
 
 init();
