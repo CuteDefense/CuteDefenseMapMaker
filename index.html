@@ -456,15 +456,18 @@ const STRUCT_DEFS = {
   Merchant: { size: 4, color: '#a61e4d', modes: ['horde', 'tow'], glyph: 'Me' },
   Market:   { size: 4, color: '#5c940d', modes: ['horde', 'tow'], glyph: 'Mk', galaxy: 'Marketplace' },  // game type name differs
   // noMirror: independent placements — never mirrored, every copy is canonical (so all
-  // export even with a mirror on). cap = max count. spawnPoint = export as
-  // gf_InitializationMapSpawnPoint<Type>(centreX,centreY,id) with id 0..cap-1 instead of
-  // a building. Cutemental's 28x28 footprint is walkable (pathable) but blocks building,
-  // like every structure.
-  Cutemental: { size: 28, color: '#9c36b5', modes: ['standard', 'quick'], glyph: 'Cu', noMirror: true, cap: 5, spawnPoint: true },
+  // export even with a mirror on). caps = per-mode max count (ids run 0..count-1).
+  // stacksSpawner = may overlap the 1x1 Spawner (and the Spawner may overlap it).
+  // spawnPoint = export as gf_InitializationMapSpawnPoint<Type>(centreX,centreY,id)
+  // instead of a building. Cutemental's 30x30 footprint is walkable (pathable) but
+  // blocks building, like every structure.
+  Cutemental: { size: 30, color: '#9c36b5', modes: ['standard', 'quick'], glyph: 'Cu', noMirror: true, caps: { standard: 4, quick: 1 }, spawnPoint: true, stacksSpawner: true },
 };
 const isStructureType = t => !!STRUCT_DEFS[t];
 // Structure types allowed to overlap the player spawner (Castle stacks on it).
 const STACKS_PS_TYPES = Object.keys(STRUCT_DEFS).filter(t => STRUCT_DEFS[t].stacksPS);
+// Structure types allowed to overlap the 1x1 Spawner (Cutemental stacks with it).
+const STACKS_SPAWNER_TYPES = Object.keys(STRUCT_DEFS).filter(t => STRUCT_DEFS[t].stacksSpawner);
 
 // SC2 stores an object's CENTRE point, in a frame where cell (i,j) spans the
 // square [i,i+1)x[j,j+1) — so the cell we call (i,j) is centred at (i+0.5,j+0.5).
@@ -783,14 +786,15 @@ function footprintClearOfSpawners(ax, ay) {
 // An NxN object can sit at (ax,ay): in bounds, all cells buildable, no wall, no
 // 1x1 spawner, no structure. (ignorePlayer skips player-spawner overlap, used when
 // replacing it / for player-spawn-stacking; ignoreStruct = array of structure types
-// to skip — a single structure replacing itself, or types that stack with it.)
-function objectFits(ax, ay, size, ignorePlayer, ignoreStruct) {
+// to skip — a single structure replacing itself, or types that stack with it;
+// ignoreSpawner skips 1x1-spawner overlap, used for structures that stack with it.)
+function objectFits(ax, ay, size, ignorePlayer, ignoreStruct, ignoreSpawner) {
   if (ax < 0 || ay < 0 || ax > GRID - size || ay > GRID - size) return false;
   for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
     const cx = ax + dx, cy = ay + dy;
     if (buildableBuf[cy * GRID + cx] !== 1) return false;
     if (occ[cy * GRID + cx]) return false;
-    if (spawners.some(s => s.x === cx && s.y === cy)) return false;
+    if (!ignoreSpawner && spawners.some(s => s.x === cx && s.y === cy)) return false;
     if (!ignorePlayer && playerSpawnerCovers(cx, cy)) return false;
     if (structureCovering(cx, cy, ignoreStruct)) return false;
   }
@@ -813,6 +817,9 @@ function structMirror(def) { return def.noMirror ? [false, false] : def.forcedMi
 // EVERY copy (independent placements, no reflection); forcedMirrorOnly keys off the
 // forced mirror; the rest off the effective mirror.
 function structCanonFn(def) { return def.noMirror ? (() => true) : def.forcedMirrorOnly ? inCanonicalForced : inCanonical; }
+// Per-mode placement cap for a structure (Cutemental: 4 in standard, 1 in quick).
+// 0 = not allowed in this mode; Infinity = uncapped (Fountain/Tower/etc).
+function structCap(def) { return def.caps ? (def.caps[state.gameMode] ?? 0) : (def.cap != null ? def.cap : Infinity); }
 function psOrbit(x, y) { return objOrbit(x, y, PS_SIZE, forcedH(), forcedV()); }
 // Place / move the Player Spawner. Default modes have a single spawner (+ forced
 // mirrors); psMulti modes (Maze Wars) place independent spawners up to the cap.
@@ -841,7 +848,7 @@ function placeSpawner(cellX, cellY) {
   const x = clamp(cellX, 0, GRID - 1), y = clamp(cellY, 0, GRID - 1);
   const pts = spOrbit(x, y);
   if (spawners.length + pts.length > SPAWNER_CAP) return false;
-  for (const p of pts) if (!objectFits(p.x, p.y, SP_SIZE, false)) return false;
+  for (const p of pts) if (!objectFits(p.x, p.y, SP_SIZE, false, STACKS_SPAWNER_TYPES)) return false;
   for (const p of pts) spawners.push({ x: p.x, y: p.y });
   state.structuralChange = true; mapCacheDirty = true;
   return true;
@@ -853,14 +860,14 @@ function placeSpawner(cellX, cellY) {
 function placeStructure(type, cellX, cellY) {
   const def = STRUCT_DEFS[type];
   if (!def || (def.modes && !def.modes.includes(state.gameMode))) return false;
-  if (def.cap && structures.filter(s => s.type === type).length >= def.cap) return false;  // capped count (Cutemental: 5 -> ids 0..4)
+  if (structures.filter(s => s.type === type).length >= structCap(def)) return false;  // per-mode cap (Cutemental: 4 standard / 1 quick)
   const sz = def.size;
   const ax = clamp(cellX - (sz >> 1), 0, GRID - sz);
   const ay = clamp(cellY - (sz >> 1), 0, GRID - sz);
   const [mh, mv] = structMirror(def);              // Castle: forced mirror only; others: effective
   const pts = objOrbit(ax, ay, sz, mh, mv);
   const ignore = def.single ? [type] : [];         // a single structure may sit where its old copy was
-  for (const p of pts) if (!objectFits(p.x, p.y, sz, !!def.stacksPS, ignore)) return false;  // Castle may sit on the player spawn
+  for (const p of pts) if (!objectFits(p.x, p.y, sz, !!def.stacksPS, ignore, !!def.stacksSpawner)) return false;  // Castle may sit on the player spawn
   if (def.single) structures = structures.filter(s => s.type !== type);
   for (const p of pts) structures.push({ type, x: p.x, y: p.y });
   state.structuralChange = true; mapCacheDirty = true;
@@ -873,7 +880,7 @@ function ensureSpawnerDefaults() {
   for (const d of defs) {
     if (spawners.some(s => s.x === d.x && s.y === d.y)) continue;
     for (const p of spOrbit(d.x, d.y))
-      if (!spawners.some(s => s.x === p.x && s.y === p.y) && objectFits(p.x, p.y, SP_SIZE, false)) spawners.push({ x: p.x, y: p.y });
+      if (!spawners.some(s => s.x === p.x && s.y === p.y) && objectFits(p.x, p.y, SP_SIZE, false, STACKS_SPAWNER_TYPES)) spawners.push({ x: p.x, y: p.y });
   }
 }
 // Ensure the default Player Spawner(s) exist. psMulti modes seed one per lane from
@@ -917,7 +924,7 @@ function resyncSpawnersForMode() {
     ensurePlayerSpawner();
   }
   spawners = cfg.allowSpawner
-    ? spawners.filter(s => objectFits(s.x, s.y, SP_SIZE, true))
+    ? spawners.filter(s => objectFits(s.x, s.y, SP_SIZE, true, STACKS_SPAWNER_TYPES, true))  // ignoreSpawner=true: don't let a spawner collide with itself
     : [];
   ensureSpawnerDefaults();                       // re-seed forced spawners (Tug of War)
   // Rebuild structures for the new mode: drop types it doesn't allow, then regenerate
@@ -931,11 +938,11 @@ function resyncSpawnersForMode() {
     const canonOf = structCanonFn(def);
     let srcs = structures.filter(s => s.type === ty && canonOf(s.x, s.y));
     if (def.single) srcs = srcs.slice(0, 1);
-    else if (def.cap) srcs = srcs.slice(0, def.cap);
+    else { const c = structCap(def); if (Number.isFinite(c)) srcs = srcs.slice(0, c); }
     const seen = new Set();
     for (const s of srcs) for (const p of objOrbit(s.x, s.y, def.size, mh, mv)) {
       const k = p.x + ',' + p.y;
-      if (!seen.has(k) && objectFits(p.x, p.y, def.size, true, [ty])) { seen.add(k); rebuilt.push({ type: ty, x: p.x, y: p.y }); }
+      if (!seen.has(k) && objectFits(p.x, p.y, def.size, true, [ty], !!def.stacksSpawner)) { seen.add(k); rebuilt.push({ type: ty, x: p.x, y: p.y }); }
     }
   }
   structures = rebuilt;
@@ -1751,7 +1758,7 @@ function loadBankXML(text, filename, modeHint) {
   structures = [];
   for (const p of data.structs) {
     const def = STRUCT_DEFS[p.type]; if (!def || (def.modes && !def.modes.includes(state.gameMode))) continue;
-    if (def.cap && structures.filter(s => s.type === p.type).length >= def.cap) continue;  // honour the count cap
+    if (structures.filter(s => s.type === p.type).length >= structCap(def)) continue;  // honour the per-mode cap
     const x = p.px - ptOffset(def.size), y = p.py - ptOffset(def.size);
     if (x < 0 || y < 0 || x > GRID - def.size || y > GRID - def.size) continue;
     const [smh, smv] = structMirror(def);
@@ -2456,7 +2463,7 @@ function drawSpawnerGhost() {
   } else {
     const x = clamp(c.x, 0, GRID - 1), y = clamp(c.y, 0, GRID - 1);
     const pts = spOrbit(x, y);
-    const ok = MODES[state.gameMode].allowSpawner && spawners.length + pts.length <= SPAWNER_CAP && pts.every(p => objectFits(p.x, p.y, SP_SIZE, false));
+    const ok = MODES[state.gameMode].allowSpawner && spawners.length + pts.length <= SPAWNER_CAP && pts.every(p => objectFits(p.x, p.y, SP_SIZE, false, STACKS_SPAWNER_TYPES));
     for (const p of pts) objGhost(p.x, p.y, SP_SIZE, ok, SP_COLOR);
   }
 }
@@ -2466,8 +2473,8 @@ function drawStructureGhost() {
   const ignore = def.single ? [state.type] : [];
   const [mh, mv] = structMirror(def);
   const pts = objOrbit(ax, ay, sz, mh, mv);
-  const underCap = !def.cap || structures.filter(s => s.type === state.type).length < def.cap;
-  const ok = underCap && pts.every(p => objectFits(p.x, p.y, sz, !!def.stacksPS, ignore));
+  const underCap = structures.filter(s => s.type === state.type).length < structCap(def);
+  const ok = underCap && pts.every(p => objectFits(p.x, p.y, sz, !!def.stacksPS, ignore, !!def.stacksSpawner));
   for (const p of pts) objGhost(p.x, p.y, sz, ok, def.color);
 }
 
