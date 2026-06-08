@@ -1632,12 +1632,12 @@ function saveMinimapPng() {
   toast('Saved ' + name, 'ok');
 }
 // Walls overlay: gray walls on a transparent background, sized for the game's
-// square minimap. Only the always-blocking walls render — tall shrubs and (yellow)
-// flowers; red/blue flowers are phase-only walls and are excluded. Every mode except
-// Horde crops to its playable area and centres it (1:1, no stretch) inside a SQUARE
-// whose side is the playable area's longest side, so the overlay lines up with the
-// square minimap. Horde exports the full 256x256 map. (1px/cell here; upscaled by
-// PNG_SCALE on export.) Same y-flip + true 2x2 footprints as the minimap.
+// square minimap. ONLY tall-shrub walls render — flowers (yellow/red/blue) are
+// excluded, as they may not be present in-game. Every mode except Horde crops to its
+// playable area and centres it (1:1, no stretch) inside a SQUARE whose side is the
+// playable area's longest side, so the overlay lines up with the square minimap.
+// Horde exports the full 256x256 map. (1px/cell here; upscaled by PNG_SCALE on
+// export.) Same y-flip + true 2x2 footprints as the minimap.
 function buildOverlayCanvas() {
   const fullMap = state.gameMode === 'horde';
   const a = fullMap ? { x0: 0, y0: 0, x1: GRID - 1, y1: GRID - 1 } : MODES[state.gameMode].area;
@@ -1649,7 +1649,7 @@ function buildOverlayCanvas() {
   const c = cv.getContext('2d');
   c.fillStyle = '#8a8f98';
   for (const t of placedTiles) {
-    if (t.type === 'RedFlowers' || t.type === 'BlueFlowers') continue;           // phase-only walls: not in the overlay
+    if (t.type !== 'TallShrubs') continue;                                       // only walls; no flowers of any colour
     if (t.x < a.x0 || t.x + 1 > a.x1 || t.y < a.y0 || t.y + 1 > a.y1) continue;  // only the exported area
     const sx = ox + (t.x - a.x0), sy = oy + (t.y - a.y0);
     c.fillRect(sx, S - (sy + 2), 2, 2);          // y-flip to match the minimap
