@@ -1,0 +1,1747 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Bank version="1">
+    <Section name="TallShrubs">
+        <Key name="0">
+            <Value point="93,67"/>
+        </Key>
+        <Key name="1">
+            <Value point="113,83"/>
+        </Key>
+        <Key name="2">
+            <Value point="83,121"/>
+        </Key>
+        <Key name="3">
+            <Value point="51,39"/>
+        </Key>
+        <Key name="4">
+            <Value point="31,47"/>
+        </Key>
+        <Key name="5">
+            <Value point="33,115"/>
+        </Key>
+        <Key name="6">
+            <Value point="49,121"/>
+        </Key>
+        <Key name="7">
+            <Value point="47,31"/>
+        </Key>
+        <Key name="8">
+            <Value point="117,39"/>
+        </Key>
+        <Key name="9">
+            <Value point="27,63"/>
+        </Key>
+        <Key name="10">
+            <Value point="113,69"/>
+        </Key>
+        <Key name="11">
+            <Value point="25,115"/>
+        </Key>
+        <Key name="12">
+            <Value point="59,121"/>
+        </Key>
+        <Key name="13">
+            <Value point="99,39"/>
+        </Key>
+        <Key name="14">
+            <Value point="87,39"/>
+        </Key>
+        <Key name="15">
+            <Value point="49,77"/>
+        </Key>
+        <Key name="16">
+            <Value point="41,97"/>
+        </Key>
+        <Key name="17">
+            <Value point="75,41"/>
+        </Key>
+        <Key name="18">
+            <Value point="93,77"/>
+        </Key>
+        <Key name="19">
+            <Value point="35,119"/>
+        </Key>
+        <Key name="20">
+            <Value point="23,111"/>
+        </Key>
+        <Key name="21">
+            <Value point="107,115"/>
+        </Key>
+        <Key name="22">
+            <Value point="119,39"/>
+        </Key>
+        <Key name="23">
+            <Value point="119,63"/>
+        </Key>
+        <Key name="24">
+            <Value point="41,63"/>
+        </Key>
+        <Key name="25">
+            <Value point="73,87"/>
+        </Key>
+        <Key name="26">
+            <Value point="29,115"/>
+        </Key>
+        <Key name="27">
+            <Value point="91,125"/>
+        </Key>
+        <Key name="28">
+            <Value point="73,13"/>
+        </Key>
+        <Key name="29">
+            <Value point="19,31"/>
+        </Key>
+        <Key name="30">
+            <Value point="113,47"/>
+        </Key>
+        <Key name="31">
+            <Value point="105,87"/>
+        </Key>
+        <Key name="32">
+            <Value point="49,99"/>
+        </Key>
+        <Key name="33">
+            <Value point="23,101"/>
+        </Key>
+        <Key name="34">
+            <Value point="89,13"/>
+        </Key>
+        <Key name="35">
+            <Value point="75,79"/>
+        </Key>
+        <Key name="36">
+            <Value point="111,87"/>
+        </Key>
+        <Key name="37">
+            <Value point="117,97"/>
+        </Key>
+        <Key name="38">
+            <Value point="115,39"/>
+        </Key>
+        <Key name="39">
+            <Value point="31,87"/>
+        </Key>
+        <Key name="40">
+            <Value point="21,97"/>
+        </Key>
+        <Key name="41">
+            <Value point="5,97"/>
+        </Key>
+        <Key name="42">
+            <Value point="119,99"/>
+        </Key>
+        <Key name="43">
+            <Value point="75,47"/>
+        </Key>
+        <Key name="44">
+            <Value point="113,49"/>
+        </Key>
+        <Key name="45">
+            <Value point="9,85"/>
+        </Key>
+        <Key name="46">
+            <Value point="105,115"/>
+        </Key>
+        <Key name="47">
+            <Value point="97,125"/>
+        </Key>
+        <Key name="48">
+            <Value point="83,23"/>
+        </Key>
+        <Key name="49">
+            <Value point="115,63"/>
+        </Key>
+        <Key name="50">
+            <Value point="37,63"/>
+        </Key>
+        <Key name="51">
+            <Value point="49,69"/>
+        </Key>
+        <Key name="52">
+            <Value point="93,71"/>
+        </Key>
+        <Key name="53">
+            <Value point="75,71"/>
+        </Key>
+        <Key name="54">
+            <Value point="125,87"/>
+        </Key>
+        <Key name="55">
+            <Value point="107,87"/>
+        </Key>
+        <Key name="56">
+            <Value point="55,87"/>
+        </Key>
+        <Key name="57">
+            <Value point="31,53"/>
+        </Key>
+        <Key name="58">
+            <Value point="73,55"/>
+        </Key>
+        <Key name="59">
+            <Value point="71,121"/>
+        </Key>
+        <Key name="60">
+            <Value point="17,63"/>
+        </Key>
+        <Key name="61">
+            <Value point="27,115"/>
+        </Key>
+        <Key name="62">
+            <Value point="23,43"/>
+        </Key>
+        <Key name="63">
+            <Value point="49,55"/>
+        </Key>
+        <Key name="64">
+            <Value point="93,81"/>
+        </Key>
+        <Key name="65">
+            <Value point="73,23"/>
+        </Key>
+        <Key name="66">
+            <Value point="73,27"/>
+        </Key>
+        <Key name="67">
+            <Value point="45,31"/>
+        </Key>
+        <Key name="68">
+            <Value point="47,63"/>
+        </Key>
+        <Key name="69">
+            <Value point="97,95"/>
+        </Key>
+        <Key name="70">
+            <Value point="91,99"/>
+        </Key>
+        <Key name="71">
+            <Value point="13,43"/>
+        </Key>
+        <Key name="72">
+            <Value point="113,55"/>
+        </Key>
+        <Key name="73">
+            <Value point="125,63"/>
+        </Key>
+        <Key name="74">
+            <Value point="75,67"/>
+        </Key>
+        <Key name="75">
+            <Value point="35,97"/>
+        </Key>
+        <Key name="76">
+            <Value point="87,23"/>
+        </Key>
+        <Key name="77">
+            <Value point="75,39"/>
+        </Key>
+        <Key name="78">
+            <Value point="93,79"/>
+        </Key>
+        <Key name="79">
+            <Value point="67,87"/>
+        </Key>
+        <Key name="80">
+            <Value point="121,95"/>
+        </Key>
+        <Key name="81">
+            <Value point="21,87"/>
+        </Key>
+        <Key name="82">
+            <Value point="99,13"/>
+        </Key>
+        <Key name="83">
+            <Value point="31,45"/>
+        </Key>
+        <Key name="84">
+            <Value point="115,87"/>
+        </Key>
+        <Key name="85">
+            <Value point="75,93"/>
+        </Key>
+        <Key name="86">
+            <Value point="31,97"/>
+        </Key>
+        <Key name="87">
+            <Value point="119,101"/>
+        </Key>
+        <Key name="88">
+            <Value point="75,37"/>
+        </Key>
+        <Key name="89">
+            <Value point="109,95"/>
+        </Key>
+        <Key name="90">
+            <Value point="99,95"/>
+        </Key>
+        <Key name="91">
+            <Value point="95,125"/>
+        </Key>
+        <Key name="92">
+            <Value point="69,31"/>
+        </Key>
+        <Key name="93">
+            <Value point="25,31"/>
+        </Key>
+        <Key name="94">
+            <Value point="107,39"/>
+        </Key>
+        <Key name="95">
+            <Value point="51,51"/>
+        </Key>
+        <Key name="96">
+            <Value point="121,63"/>
+        </Key>
+        <Key name="97">
+            <Value point="25,63"/>
+        </Key>
+        <Key name="98">
+            <Value point="49,67"/>
+        </Key>
+        <Key name="99">
+            <Value point="9,69"/>
+        </Key>
+        <Key name="100">
+            <Value point="87,87"/>
+        </Key>
+        <Key name="101">
+            <Value point="75,117"/>
+        </Key>
+        <Key name="102">
+            <Value point="41,121"/>
+        </Key>
+        <Key name="103">
+            <Value point="71,55"/>
+        </Key>
+        <Key name="104">
+            <Value point="113,85"/>
+        </Key>
+        <Key name="105">
+            <Value point="59,87"/>
+        </Key>
+        <Key name="106">
+            <Value point="37,121"/>
+        </Key>
+        <Key name="107">
+            <Value point="51,41"/>
+        </Key>
+        <Key name="108">
+            <Value point="31,63"/>
+        </Key>
+        <Key name="109">
+            <Value point="17,87"/>
+        </Key>
+        <Key name="110">
+            <Value point="7,115"/>
+        </Key>
+        <Key name="111">
+            <Value point="89,19"/>
+        </Key>
+        <Key name="112">
+            <Value point="27,31"/>
+        </Key>
+        <Key name="113">
+            <Value point="107,95"/>
+        </Key>
+        <Key name="114">
+            <Value point="91,97"/>
+        </Key>
+        <Key name="115">
+            <Value point="15,115"/>
+        </Key>
+        <Key name="116">
+            <Value point="89,125"/>
+        </Key>
+        <Key name="117">
+            <Value point="51,29"/>
+        </Key>
+        <Key name="118">
+            <Value point="63,31"/>
+        </Key>
+        <Key name="119">
+            <Value point="97,57"/>
+        </Key>
+        <Key name="120">
+            <Value point="49,105"/>
+        </Key>
+        <Key name="121">
+            <Value point="119,107"/>
+        </Key>
+        <Key name="122">
+            <Value point="51,13"/>
+        </Key>
+        <Key name="123">
+            <Value point="51,17"/>
+        </Key>
+        <Key name="124">
+            <Value point="59,55"/>
+        </Key>
+        <Key name="125">
+            <Value point="9,67"/>
+        </Key>
+        <Key name="126">
+            <Value point="93,83"/>
+        </Key>
+        <Key name="127">
+            <Value point="3,97"/>
+        </Key>
+        <Key name="128">
+            <Value point="125,115"/>
+        </Key>
+        <Key name="129">
+            <Value point="31,41"/>
+        </Key>
+        <Key name="130">
+            <Value point="11,63"/>
+        </Key>
+        <Key name="131">
+            <Value point="47,87"/>
+        </Key>
+        <Key name="132">
+            <Value point="83,95"/>
+        </Key>
+        <Key name="133">
+            <Value point="109,115"/>
+        </Key>
+        <Key name="134">
+            <Value point="119,115"/>
+        </Key>
+        <Key name="135">
+            <Value point="93,49"/>
+        </Key>
+        <Key name="136">
+            <Value point="33,55"/>
+        </Key>
+        <Key name="137">
+            <Value point="9,81"/>
+        </Key>
+        <Key name="138">
+            <Value point="35,87"/>
+        </Key>
+        <Key name="139">
+            <Value point="119,95"/>
+        </Key>
+        <Key name="140">
+            <Value point="49,119"/>
+        </Key>
+        <Key name="141">
+            <Value point="113,63"/>
+        </Key>
+        <Key name="142">
+            <Value point="93,75"/>
+        </Key>
+        <Key name="143">
+            <Value point="75,77"/>
+        </Key>
+        <Key name="144">
+            <Value point="75,83"/>
+        </Key>
+        <Key name="145">
+            <Value point="23,113"/>
+        </Key>
+        <Key name="146">
+            <Value point="73,11"/>
+        </Key>
+        <Key name="147">
+            <Value point="93,45"/>
+        </Key>
+        <Key name="148">
+            <Value point="49,65"/>
+        </Key>
+        <Key name="149">
+            <Value point="91,101"/>
+        </Key>
+        <Key name="150">
+            <Value point="89,17"/>
+        </Key>
+        <Key name="151">
+            <Value point="99,23"/>
+        </Key>
+        <Key name="152">
+            <Value point="99,27"/>
+        </Key>
+        <Key name="153">
+            <Value point="75,43"/>
+        </Key>
+        <Key name="154">
+            <Value point="47,55"/>
+        </Key>
+        <Key name="155">
+            <Value point="7,97"/>
+        </Key>
+        <Key name="156">
+            <Value point="89,107"/>
+        </Key>
+        <Key name="157">
+            <Value point="31,37"/>
+        </Key>
+        <Key name="158">
+            <Value point="113,65"/>
+        </Key>
+        <Key name="159">
+            <Value point="83,103"/>
+        </Key>
+        <Key name="160">
+            <Value point="9,31"/>
+        </Key>
+        <Key name="161">
+            <Value point="113,41"/>
+        </Key>
+        <Key name="162">
+            <Value point="93,69"/>
+        </Key>
+        <Key name="163">
+            <Value point="75,81"/>
+        </Key>
+        <Key name="164">
+            <Value point="119,105"/>
+        </Key>
+        <Key name="165">
+            <Value point="17,31"/>
+        </Key>
+        <Key name="166">
+            <Value point="99,33"/>
+        </Key>
+        <Key name="167">
+            <Value point="113,79"/>
+        </Key>
+        <Key name="168">
+            <Value point="81,87"/>
+        </Key>
+        <Key name="169">
+            <Value point="69,87"/>
+        </Key>
+        <Key name="170">
+            <Value point="123,95"/>
+        </Key>
+        <Key name="171">
+            <Value point="111,39"/>
+        </Key>
+        <Key name="172">
+            <Value point="89,21"/>
+        </Key>
+        <Key name="173">
+            <Value point="67,55"/>
+        </Key>
+        <Key name="174">
+            <Value point="123,63"/>
+        </Key>
+        <Key name="175">
+            <Value point="97,87"/>
+        </Key>
+        <Key name="176">
+            <Value point="3,115"/>
+        </Key>
+        <Key name="177">
+            <Value point="67,121"/>
+        </Key>
+        <Key name="178">
+            <Value point="51,49"/>
+        </Key>
+        <Key name="179">
+            <Value point="49,111"/>
+        </Key>
+        <Key name="180">
+            <Value point="23,31"/>
+        </Key>
+        <Key name="181">
+            <Value point="109,87"/>
+        </Key>
+        <Key name="182">
+            <Value point="75,121"/>
+        </Key>
+        <Key name="183">
+            <Value point="31,9"/>
+        </Key>
+        <Key name="184">
+            <Value point="99,11"/>
+        </Key>
+        <Key name="185">
+            <Value point="49,31"/>
+        </Key>
+        <Key name="186">
+            <Value point="99,35"/>
+        </Key>
+        <Key name="187">
+            <Value point="75,51"/>
+        </Key>
+        <Key name="188">
+            <Value point="9,71"/>
+        </Key>
+        <Key name="189">
+            <Value point="27,97"/>
+        </Key>
+        <Key name="190">
+            <Value point="73,5"/>
+        </Key>
+        <Key name="191">
+            <Value point="51,11"/>
+        </Key>
+        <Key name="192">
+            <Value point="73,29"/>
+        </Key>
+        <Key name="193">
+            <Value point="45,55"/>
+        </Key>
+        <Key name="194">
+            <Value point="65,121"/>
+        </Key>
+        <Key name="195">
+            <Value point="83,125"/>
+        </Key>
+        <Key name="196">
+            <Value point="51,5"/>
+        </Key>
+        <Key name="197">
+            <Value point="37,31"/>
+        </Key>
+        <Key name="198">
+            <Value point="69,55"/>
+        </Key>
+        <Key name="199">
+            <Value point="113,73"/>
+        </Key>
+        <Key name="200">
+            <Value point="9,73"/>
+        </Key>
+        <Key name="201">
+            <Value point="89,39"/>
+        </Key>
+        <Key name="202">
+            <Value point="49,89"/>
+        </Key>
+        <Key name="203">
+            <Value point="113,109"/>
+        </Key>
+        <Key name="204">
+            <Value point="75,109"/>
+        </Key>
+        <Key name="205">
+            <Value point="117,115"/>
+        </Key>
+        <Key name="206">
+            <Value point="105,123"/>
+        </Key>
+        <Key name="207">
+            <Value point="51,7"/>
+        </Key>
+        <Key name="208">
+            <Value point="125,39"/>
+        </Key>
+        <Key name="209">
+            <Value point="93,53"/>
+        </Key>
+        <Key name="210">
+            <Value point="15,97"/>
+        </Key>
+        <Key name="211">
+            <Value point="31,39"/>
+        </Key>
+        <Key name="212">
+            <Value point="11,43"/>
+        </Key>
+        <Key name="213">
+            <Value point="75,57"/>
+        </Key>
+        <Key name="214">
+            <Value point="49,85"/>
+        </Key>
+        <Key name="215">
+            <Value point="23,87"/>
+        </Key>
+        <Key name="216">
+            <Value point="53,121"/>
+        </Key>
+        <Key name="217">
+            <Value point="67,31"/>
+        </Key>
+        <Key name="218">
+            <Value point="41,55"/>
+        </Key>
+        <Key name="219">
+            <Value point="37,55"/>
+        </Key>
+        <Key name="220">
+            <Value point="93,59"/>
+        </Key>
+        <Key name="221">
+            <Value point="115,115"/>
+        </Key>
+        <Key name="222">
+            <Value point="81,23"/>
+        </Key>
+        <Key name="223">
+            <Value point="31,49"/>
+        </Key>
+        <Key name="224">
+            <Value point="127,87"/>
+        </Key>
+        <Key name="225">
+            <Value point="65,87"/>
+        </Key>
+        <Key name="226">
+            <Value point="87,95"/>
+        </Key>
+        <Key name="227">
+            <Value point="53,55"/>
+        </Key>
+        <Key name="228">
+            <Value point="13,63"/>
+        </Key>
+        <Key name="229">
+            <Value point="91,95"/>
+        </Key>
+        <Key name="230">
+            <Value point="73,25"/>
+        </Key>
+        <Key name="231">
+            <Value point="95,39"/>
+        </Key>
+        <Key name="232">
+            <Value point="113,95"/>
+        </Key>
+        <Key name="233">
+            <Value point="83,115"/>
+        </Key>
+        <Key name="234">
+            <Value point="89,11"/>
+        </Key>
+        <Key name="235">
+            <Value point="51,35"/>
+        </Key>
+        <Key name="236">
+            <Value point="27,87"/>
+        </Key>
+        <Key name="237">
+            <Value point="123,115"/>
+        </Key>
+        <Key name="238">
+            <Value point="101,39"/>
+        </Key>
+        <Key name="239">
+            <Value point="81,39"/>
+        </Key>
+        <Key name="240">
+            <Value point="75,97"/>
+        </Key>
+        <Key name="241">
+            <Value point="113,113"/>
+        </Key>
+        <Key name="242">
+            <Value point="121,39"/>
+        </Key>
+        <Key name="243">
+            <Value point="113,53"/>
+        </Key>
+        <Key name="244">
+            <Value point="65,31"/>
+        </Key>
+        <Key name="245">
+            <Value point="55,55"/>
+        </Key>
+        <Key name="246">
+            <Value point="49,81"/>
+        </Key>
+        <Key name="247">
+            <Value point="49,73"/>
+        </Key>
+        <Key name="248">
+            <Value point="13,87"/>
+        </Key>
+        <Key name="249">
+            <Value point="113,105"/>
+        </Key>
+        <Key name="250">
+            <Value point="21,115"/>
+        </Key>
+        <Key name="251">
+            <Value point="83,119"/>
+        </Key>
+        <Key name="252">
+            <Value point="31,31"/>
+        </Key>
+        <Key name="253">
+            <Value point="75,49"/>
+        </Key>
+        <Key name="254">
+            <Value point="49,75"/>
+        </Key>
+        <Key name="255">
+            <Value point="9,79"/>
+        </Key>
+        <Key name="256">
+            <Value point="91,87"/>
+        </Key>
+        <Key name="257">
+            <Value point="113,99"/>
+        </Key>
+        <Key name="258">
+            <Value point="83,105"/>
+        </Key>
+        <Key name="259">
+            <Value point="61,55"/>
+        </Key>
+        <Key name="260">
+            <Value point="89,87"/>
+        </Key>
+        <Key name="261">
+            <Value point="85,95"/>
+        </Key>
+        <Key name="262">
+            <Value point="75,119"/>
+        </Key>
+        <Key name="263">
+            <Value point="55,121"/>
+        </Key>
+        <Key name="264">
+            <Value point="35,55"/>
+        </Key>
+        <Key name="265">
+            <Value point="33,87"/>
+        </Key>
+        <Key name="266">
+            <Value point="23,99"/>
+        </Key>
+        <Key name="267">
+            <Value point="73,17"/>
+        </Key>
+        <Key name="268">
+            <Value point="87,125"/>
+        </Key>
+        <Key name="269">
+            <Value point="103,127"/>
+        </Key>
+        <Key name="270">
+            <Value point="49,83"/>
+        </Key>
+        <Key name="271">
+            <Value point="75,107"/>
+        </Key>
+        <Key name="272">
+            <Value point="121,115"/>
+        </Key>
+        <Key name="273">
+            <Value point="51,25"/>
+        </Key>
+        <Key name="274">
+            <Value point="111,95"/>
+        </Key>
+        <Key name="275">
+            <Value point="73,7"/>
+        </Key>
+        <Key name="276">
+            <Value point="73,15"/>
+        </Key>
+        <Key name="277">
+            <Value point="31,15"/>
+        </Key>
+        <Key name="278">
+            <Value point="31,25"/>
+        </Key>
+        <Key name="279">
+            <Value point="25,43"/>
+        </Key>
+        <Key name="280">
+            <Value point="23,63"/>
+        </Key>
+        <Key name="281">
+            <Value point="9,65"/>
+        </Key>
+        <Key name="282">
+            <Value point="83,99"/>
+        </Key>
+        <Key name="283">
+            <Value point="73,121"/>
+        </Key>
+        <Key name="284">
+            <Value point="51,3"/>
+        </Key>
+        <Key name="285">
+            <Value point="113,43"/>
+        </Key>
+        <Key name="286">
+            <Value point="103,87"/>
+        </Key>
+        <Key name="287">
+            <Value point="119,109"/>
+        </Key>
+        <Key name="288">
+            <Value point="31,7"/>
+        </Key>
+        <Key name="289">
+            <Value point="7,31"/>
+        </Key>
+        <Key name="290">
+            <Value point="51,55"/>
+        </Key>
+        <Key name="291">
+            <Value point="51,87"/>
+        </Key>
+        <Key name="292">
+            <Value point="35,125"/>
+        </Key>
+        <Key name="293">
+            <Value point="51,23"/>
+        </Key>
+        <Key name="294">
+            <Value point="51,27"/>
+        </Key>
+        <Key name="295">
+            <Value point="31,27"/>
+        </Key>
+        <Key name="296">
+            <Value point="7,43"/>
+        </Key>
+        <Key name="297">
+            <Value point="93,55"/>
+        </Key>
+        <Key name="298">
+            <Value point="21,63"/>
+        </Key>
+        <Key name="299">
+            <Value point="75,87"/>
+        </Key>
+        <Key name="300">
+            <Value point="73,3"/>
+        </Key>
+        <Key name="301">
+            <Value point="77,23"/>
+        </Key>
+        <Key name="302">
+            <Value point="93,57"/>
+        </Key>
+        <Key name="303">
+            <Value point="125,95"/>
+        </Key>
+        <Key name="304">
+            <Value point="75,113"/>
+        </Key>
+        <Key name="305">
+            <Value point="35,115"/>
+        </Key>
+        <Key name="306">
+            <Value point="105,125"/>
+        </Key>
+        <Key name="307">
+            <Value point="9,63"/>
+        </Key>
+        <Key name="308">
+            <Value point="19,87"/>
+        </Key>
+        <Key name="309">
+            <Value point="11,31"/>
+        </Key>
+        <Key name="310">
+            <Value point="113,103"/>
+        </Key>
+        <Key name="311">
+            <Value point="93,39"/>
+        </Key>
+        <Key name="312">
+            <Value point="91,39"/>
+        </Key>
+        <Key name="313">
+            <Value point="113,71"/>
+        </Key>
+        <Key name="314">
+            <Value point="9,83"/>
+        </Key>
+        <Key name="315">
+            <Value point="117,99"/>
+        </Key>
+        <Key name="316">
+            <Value point="75,31"/>
+        </Key>
+        <Key name="317">
+            <Value point="29,97"/>
+        </Key>
+        <Key name="318">
+            <Value point="57,121"/>
+        </Key>
+        <Key name="319">
+            <Value point="35,123"/>
+        </Key>
+        <Key name="320">
+            <Value point="117,63"/>
+        </Key>
+        <Key name="321">
+            <Value point="85,87"/>
+        </Key>
+        <Key name="322">
+            <Value point="89,95"/>
+        </Key>
+        <Key name="323">
+            <Value point="83,97"/>
+        </Key>
+        <Key name="324">
+            <Value point="25,97"/>
+        </Key>
+        <Key name="325">
+            <Value point="93,125"/>
+        </Key>
+        <Key name="326">
+            <Value point="15,43"/>
+        </Key>
+        <Key name="327">
+            <Value point="49,87"/>
+        </Key>
+        <Key name="328">
+            <Value point="29,87"/>
+        </Key>
+        <Key name="329">
+            <Value point="111,115"/>
+        </Key>
+        <Key name="330">
+            <Value point="17,43"/>
+        </Key>
+        <Key name="331">
+            <Value point="113,59"/>
+        </Key>
+        <Key name="332">
+            <Value point="75,75"/>
+        </Key>
+        <Key name="333">
+            <Value point="121,87"/>
+        </Key>
+        <Key name="334">
+            <Value point="91,107"/>
+        </Key>
+        <Key name="335">
+            <Value point="75,125"/>
+        </Key>
+        <Key name="336">
+            <Value point="79,23"/>
+        </Key>
+        <Key name="337">
+            <Value point="99,57"/>
+        </Key>
+        <Key name="338">
+            <Value point="73,31"/>
+        </Key>
+        <Key name="339">
+            <Value point="21,43"/>
+        </Key>
+        <Key name="340">
+            <Value point="39,63"/>
+        </Key>
+        <Key name="341">
+            <Value point="113,111"/>
+        </Key>
+        <Key name="342">
+            <Value point="31,17"/>
+        </Key>
+        <Key name="343">
+            <Value point="107,57"/>
+        </Key>
+        <Key name="344">
+            <Value point="45,87"/>
+        </Key>
+        <Key name="345">
+            <Value point="101,95"/>
+        </Key>
+        <Key name="346">
+            <Value point="19,97"/>
+        </Key>
+        <Key name="347">
+            <Value point="51,37"/>
+        </Key>
+        <Key name="348">
+            <Value point="95,57"/>
+        </Key>
+        <Key name="349">
+            <Value point="75,95"/>
+        </Key>
+        <Key name="350">
+            <Value point="87,107"/>
+        </Key>
+        <Key name="351">
+            <Value point="83,109"/>
+        </Key>
+        <Key name="352">
+            <Value point="99,19"/>
+        </Key>
+        <Key name="353">
+            <Value point="75,59"/>
+        </Key>
+        <Key name="354">
+            <Value point="113,61"/>
+        </Key>
+        <Key name="355">
+            <Value point="37,87"/>
+        </Key>
+        <Key name="356">
+            <Value point="33,97"/>
+        </Key>
+        <Key name="357">
+            <Value point="99,9"/>
+        </Key>
+        <Key name="358">
+            <Value point="61,87"/>
+        </Key>
+        <Key name="359">
+            <Value point="53,87"/>
+        </Key>
+        <Key name="360">
+            <Value point="51,19"/>
+        </Key>
+        <Key name="361">
+            <Value point="51,31"/>
+        </Key>
+        <Key name="362">
+            <Value point="51,33"/>
+        </Key>
+        <Key name="363">
+            <Value point="9,97"/>
+        </Key>
+        <Key name="364">
+            <Value point="119,113"/>
+        </Key>
+        <Key name="365">
+            <Value point="53,31"/>
+        </Key>
+        <Key name="366">
+            <Value point="75,55"/>
+        </Key>
+        <Key name="367">
+            <Value point="25,87"/>
+        </Key>
+        <Key name="368">
+            <Value point="89,7"/>
+        </Key>
+        <Key name="369">
+            <Value point="51,47"/>
+        </Key>
+        <Key name="370">
+            <Value point="117,95"/>
+        </Key>
+        <Key name="371">
+            <Value point="17,115"/>
+        </Key>
+        <Key name="372">
+            <Value point="75,123"/>
+        </Key>
+        <Key name="373">
+            <Value point="99,125"/>
+        </Key>
+        <Key name="374">
+            <Value point="99,17"/>
+        </Key>
+        <Key name="375">
+            <Value point="75,45"/>
+        </Key>
+        <Key name="376">
+            <Value point="75,73"/>
+        </Key>
+        <Key name="377">
+            <Value point="113,81"/>
+        </Key>
+        <Key name="378">
+            <Value point="49,103"/>
+        </Key>
+        <Key name="379">
+            <Value point="85,125"/>
+        </Key>
+        <Key name="380">
+            <Value point="89,15"/>
+        </Key>
+        <Key name="381">
+            <Value point="39,31"/>
+        </Key>
+        <Key name="382">
+            <Value point="31,51"/>
+        </Key>
+        <Key name="383">
+            <Value point="93,61"/>
+        </Key>
+        <Key name="384">
+            <Value point="113,87"/>
+        </Key>
+        <Key name="385">
+            <Value point="75,111"/>
+        </Key>
+        <Key name="386">
+            <Value point="103,125"/>
+        </Key>
+        <Key name="387">
+            <Value point="99,25"/>
+        </Key>
+        <Key name="388">
+            <Value point="75,103"/>
+        </Key>
+        <Key name="389">
+            <Value point="5,115"/>
+        </Key>
+        <Key name="390">
+            <Value point="113,57"/>
+        </Key>
+        <Key name="391">
+            <Value point="49,113"/>
+        </Key>
+        <Key name="392">
+            <Value point="123,87"/>
+        </Key>
+        <Key name="393">
+            <Value point="113,107"/>
+        </Key>
+        <Key name="394">
+            <Value point="85,23"/>
+        </Key>
+        <Key name="395">
+            <Value point="75,69"/>
+        </Key>
+        <Key name="396">
+            <Value point="95,87"/>
+        </Key>
+        <Key name="397">
+            <Value point="15,87"/>
+        </Key>
+        <Key name="398">
+            <Value point="59,31"/>
+        </Key>
+        <Key name="399">
+            <Value point="111,57"/>
+        </Key>
+        <Key name="400">
+            <Value point="23,97"/>
+        </Key>
+        <Key name="401">
+            <Value point="119,103"/>
+        </Key>
+        <Key name="402">
+            <Value point="23,103"/>
+        </Key>
+        <Key name="403">
+            <Value point="75,61"/>
+        </Key>
+        <Key name="404">
+            <Value point="49,101"/>
+        </Key>
+        <Key name="405">
+            <Value point="23,109"/>
+        </Key>
+        <Key name="406">
+            <Value point="113,39"/>
+        </Key>
+        <Key name="407">
+            <Value point="49,71"/>
+        </Key>
+        <Key name="408">
+            <Value point="99,31"/>
+        </Key>
+        <Key name="409">
+            <Value point="43,31"/>
+        </Key>
+        <Key name="410">
+            <Value point="39,55"/>
+        </Key>
+        <Key name="411">
+            <Value point="39,97"/>
+        </Key>
+        <Key name="412">
+            <Value point="49,115"/>
+        </Key>
+        <Key name="413">
+            <Value point="99,7"/>
+        </Key>
+        <Key name="414">
+            <Value point="113,101"/>
+        </Key>
+        <Key name="415">
+            <Value point="35,117"/>
+        </Key>
+        <Key name="416">
+            <Value point="19,63"/>
+        </Key>
+        <Key name="417">
+            <Value point="57,87"/>
+        </Key>
+        <Key name="418">
+            <Value point="49,117"/>
+        </Key>
+        <Key name="419">
+            <Value point="73,19"/>
+        </Key>
+        <Key name="420">
+            <Value point="93,73"/>
+        </Key>
+        <Key name="421">
+            <Value point="93,95"/>
+        </Key>
+        <Key name="422">
+            <Value point="89,9"/>
+        </Key>
+        <Key name="423">
+            <Value point="109,39"/>
+        </Key>
+        <Key name="424">
+            <Value point="65,55"/>
+        </Key>
+        <Key name="425">
+            <Value point="119,111"/>
+        </Key>
+        <Key name="426">
+            <Value point="31,11"/>
+        </Key>
+        <Key name="427">
+            <Value point="89,23"/>
+        </Key>
+        <Key name="428">
+            <Value point="15,31"/>
+        </Key>
+        <Key name="429">
+            <Value point="3,31"/>
+        </Key>
+        <Key name="430">
+            <Value point="75,53"/>
+        </Key>
+        <Key name="431">
+            <Value point="51,53"/>
+        </Key>
+        <Key name="432">
+            <Value point="93,85"/>
+        </Key>
+        <Key name="433">
+            <Value point="93,87"/>
+        </Key>
+        <Key name="434">
+            <Value point="85,107"/>
+        </Key>
+        <Key name="435">
+            <Value point="9,115"/>
+        </Key>
+        <Key name="436">
+            <Value point="39,121"/>
+        </Key>
+        <Key name="437">
+            <Value point="99,15"/>
+        </Key>
+        <Key name="438">
+            <Value point="31,19"/>
+        </Key>
+        <Key name="439">
+            <Value point="33,63"/>
+        </Key>
+        <Key name="440">
+            <Value point="7,63"/>
+        </Key>
+        <Key name="441">
+            <Value point="75,99"/>
+        </Key>
+        <Key name="442">
+            <Value point="69,121"/>
+        </Key>
+        <Key name="443">
+            <Value point="31,3"/>
+        </Key>
+        <Key name="444">
+            <Value point="99,29"/>
+        </Key>
+        <Key name="445">
+            <Value point="97,39"/>
+        </Key>
+        <Key name="446">
+            <Value point="83,117"/>
+        </Key>
+        <Key name="447">
+            <Value point="93,41"/>
+        </Key>
+        <Key name="448">
+            <Value point="109,57"/>
+        </Key>
+        <Key name="449">
+            <Value point="101,57"/>
+        </Key>
+        <Key name="450">
+            <Value point="49,63"/>
+        </Key>
+        <Key name="451">
+            <Value point="45,97"/>
+        </Key>
+        <Key name="452">
+            <Value point="123,39"/>
+        </Key>
+        <Key name="453">
+            <Value point="39,87"/>
+        </Key>
+        <Key name="454">
+            <Value point="113,115"/>
+        </Key>
+        <Key name="455">
+            <Value point="85,39"/>
+        </Key>
+        <Key name="456">
+            <Value point="19,115"/>
+        </Key>
+        <Key name="457">
+            <Value point="105,117"/>
+        </Key>
+        <Key name="458">
+            <Value point="93,51"/>
+        </Key>
+        <Key name="459">
+            <Value point="113,67"/>
+        </Key>
+        <Key name="460">
+            <Value point="113,77"/>
+        </Key>
+        <Key name="461">
+            <Value point="49,95"/>
+        </Key>
+        <Key name="462">
+            <Value point="47,97"/>
+        </Key>
+        <Key name="463">
+            <Value point="51,121"/>
+        </Key>
+        <Key name="464">
+            <Value point="19,43"/>
+        </Key>
+        <Key name="465">
+            <Value point="75,85"/>
+        </Key>
+        <Key name="466">
+            <Value point="35,121"/>
+        </Key>
+        <Key name="467">
+            <Value point="61,31"/>
+        </Key>
+        <Key name="468">
+            <Value point="11,87"/>
+        </Key>
+        <Key name="469">
+            <Value point="9,87"/>
+        </Key>
+        <Key name="470">
+            <Value point="31,23"/>
+        </Key>
+        <Key name="471">
+            <Value point="83,39"/>
+        </Key>
+        <Key name="472">
+            <Value point="57,55"/>
+        </Key>
+        <Key name="473">
+            <Value point="45,63"/>
+        </Key>
+        <Key name="474">
+            <Value point="71,87"/>
+        </Key>
+        <Key name="475">
+            <Value point="43,97"/>
+        </Key>
+        <Key name="476">
+            <Value point="93,43"/>
+        </Key>
+        <Key name="477">
+            <Value point="113,45"/>
+        </Key>
+        <Key name="478">
+            <Value point="95,95"/>
+        </Key>
+        <Key name="479">
+            <Value point="75,101"/>
+        </Key>
+        <Key name="480">
+            <Value point="15,63"/>
+        </Key>
+        <Key name="481">
+            <Value point="83,87"/>
+        </Key>
+        <Key name="482">
+            <Value point="113,97"/>
+        </Key>
+        <Key name="483">
+            <Value point="83,107"/>
+        </Key>
+        <Key name="484">
+            <Value point="51,15"/>
+        </Key>
+        <Key name="485">
+            <Value point="83,101"/>
+        </Key>
+        <Key name="486">
+            <Value point="75,105"/>
+        </Key>
+        <Key name="487">
+            <Value point="71,31"/>
+        </Key>
+        <Key name="488">
+            <Value point="35,63"/>
+        </Key>
+        <Key name="489">
+            <Value point="41,31"/>
+        </Key>
+        <Key name="490">
+            <Value point="17,97"/>
+        </Key>
+        <Key name="491">
+            <Value point="47,121"/>
+        </Key>
+        <Key name="492">
+            <Value point="101,125"/>
+        </Key>
+        <Key name="493">
+            <Value point="31,43"/>
+        </Key>
+        <Key name="494">
+            <Value point="9,43"/>
+        </Key>
+        <Key name="495">
+            <Value point="31,55"/>
+        </Key>
+        <Key name="496">
+            <Value point="49,79"/>
+        </Key>
+        <Key name="497">
+            <Value point="49,97"/>
+        </Key>
+        <Key name="498">
+            <Value point="75,115"/>
+        </Key>
+        <Key name="499">
+            <Value point="23,115"/>
+        </Key>
+        <Key name="500">
+            <Value point="83,123"/>
+        </Key>
+    </Section>
+    <Section name="Flowers">
+        <Key name="0">
+            <Value point="127,39"/>
+        </Key>
+        <Key name="1">
+            <Value point="51,43"/>
+        </Key>
+        <Key name="2">
+            <Value point="27,43"/>
+        </Key>
+        <Key name="3">
+            <Value point="3,43"/>
+        </Key>
+        <Key name="4">
+            <Value point="75,65"/>
+        </Key>
+        <Key name="5">
+            <Value point="9,77"/>
+        </Key>
+        <Key name="6">
+            <Value point="61,121"/>
+        </Key>
+        <Key name="7">
+            <Value point="89,5"/>
+        </Key>
+        <Key name="8">
+            <Value point="57,31"/>
+        </Key>
+        <Key name="9">
+            <Value point="75,35"/>
+        </Key>
+        <Key name="10">
+            <Value point="51,45"/>
+        </Key>
+        <Key name="11">
+            <Value point="49,57"/>
+        </Key>
+        <Key name="12">
+            <Value point="31,35"/>
+        </Key>
+        <Key name="13">
+            <Value point="5,43"/>
+        </Key>
+        <Key name="14">
+            <Value point="23,107"/>
+        </Key>
+        <Key name="15">
+            <Value point="43,63"/>
+        </Key>
+        <Key name="16">
+            <Value point="11,115"/>
+        </Key>
+        <Key name="17">
+            <Value point="35,127"/>
+        </Key>
+        <Key name="18">
+            <Value point="51,21"/>
+        </Key>
+        <Key name="19">
+            <Value point="99,37"/>
+        </Key>
+        <Key name="20">
+            <Value point="45,121"/>
+        </Key>
+        <Key name="21">
+            <Value point="105,57"/>
+        </Key>
+        <Key name="22">
+            <Value point="103,57"/>
+        </Key>
+        <Key name="23">
+            <Value point="79,39"/>
+        </Key>
+        <Key name="24">
+            <Value point="75,63"/>
+        </Key>
+        <Key name="25">
+            <Value point="49,109"/>
+        </Key>
+        <Key name="26">
+            <Value point="49,107"/>
+        </Key>
+        <Key name="27">
+            <Value point="43,121"/>
+        </Key>
+        <Key name="28">
+            <Value point="55,31"/>
+        </Key>
+        <Key name="29">
+            <Value point="33,31"/>
+        </Key>
+        <Key name="30">
+            <Value point="49,61"/>
+        </Key>
+        <Key name="31">
+            <Value point="35,31"/>
+        </Key>
+        <Key name="32">
+            <Value point="127,63"/>
+        </Key>
+        <Key name="33">
+            <Value point="23,105"/>
+        </Key>
+        <Key name="34">
+            <Value point="89,3"/>
+        </Key>
+        <Key name="35">
+            <Value point="105,39"/>
+        </Key>
+        <Key name="36">
+            <Value point="73,9"/>
+        </Key>
+        <Key name="37">
+            <Value point="29,43"/>
+        </Key>
+        <Key name="38">
+            <Value point="9,75"/>
+        </Key>
+        <Key name="39">
+            <Value point="13,115"/>
+        </Key>
+        <Key name="40">
+            <Value point="99,3"/>
+        </Key>
+        <Key name="41">
+            <Value point="31,33"/>
+        </Key>
+        <Key name="42">
+            <Value point="103,39"/>
+        </Key>
+        <Key name="43">
+            <Value point="77,39"/>
+        </Key>
+        <Key name="44">
+            <Value point="31,57"/>
+        </Key>
+        <Key name="45">
+            <Value point="31,61"/>
+        </Key>
+        <Key name="46">
+            <Value point="3,63"/>
+        </Key>
+        <Key name="47">
+            <Value point="41,87"/>
+        </Key>
+        <Key name="48">
+            <Value point="13,97"/>
+        </Key>
+        <Key name="49">
+            <Value point="5,63"/>
+        </Key>
+        <Key name="50">
+            <Value point="63,121"/>
+        </Key>
+    </Section>
+    <Section name="RedFlowers">
+    </Section>
+    <Section name="BlueFlowers">
+    </Section>
+    <Section name="Count">
+        <Key name="TallShrubs">
+            <Value int="501"/>
+        </Key>
+        <Key name="Flowers">
+            <Value int="51"/>
+        </Key>
+        <Key name="RedFlowers">
+            <Value int="0"/>
+        </Key>
+        <Key name="BlueFlowers">
+            <Value int="0"/>
+        </Key>
+        <Key name="PlayerSpawner">
+            <Value int="1"/>
+        </Key>
+        <Key name="Spawner">
+            <Value int="1"/>
+        </Key>
+        <Key name="Castle">
+            <Value int="0"/>
+        </Key>
+        <Key name="Fountain">
+            <Value int="0"/>
+        </Key>
+        <Key name="Tower">
+            <Value int="0"/>
+        </Key>
+        <Key name="Merchant">
+            <Value int="0"/>
+        </Key>
+        <Key name="Market">
+            <Value int="0"/>
+        </Key>
+        <Key name="Cutemental">
+            <Value int="4"/>
+        </Key>
+    </Section>
+    <Section name="PlayerSpawner">
+        <Key name="0">
+            <Value point="128,128"/>
+        </Key>
+    </Section>
+    <Section name="Spawner">
+        <Key name="0">
+            <Value point="3.5,3.5"/>
+        </Key>
+    </Section>
+    <Section name="Castle">
+    </Section>
+    <Section name="Fountain">
+    </Section>
+    <Section name="Tower">
+    </Section>
+    <Section name="Merchant">
+    </Section>
+    <Section name="Market">
+    </Section>
+    <Section name="Cutemental">
+        <Key name="0">
+            <Value point="16,16"/>
+        </Key>
+        <Key name="1">
+            <Value point="240,16"/>
+        </Key>
+        <Key name="2">
+            <Value point="240,240"/>
+        </Key>
+        <Key name="3">
+            <Value point="16,240"/>
+        </Key>
+    </Section>
+    <Section name="Disabled Mirror">
+        <Key name="Horizontal">
+            <Value flag="0"/>
+        </Key>
+        <Key name="Vertical">
+            <Value flag="0"/>
+        </Key>
+    </Section>
+</Bank>
