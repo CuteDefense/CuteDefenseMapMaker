@@ -459,9 +459,9 @@ const STRUCT_DEFS = {
   // export even with a mirror on). caps = per-mode max count (ids run 0..count-1).
   // stacksSpawner = may overlap the 1x1 Spawner (and the Spawner may overlap it).
   // spawnPoint = export as gf_InitializationMapSpawnPoint<Type>(centreX,centreY,id)
-  // instead of a building. Cutemental's 30x30 footprint is walkable (pathable) but
+  // instead of a building. Cutemental's 28x28 footprint is walkable (pathable) but
   // blocks building, like every structure.
-  Cutemental: { size: 30, color: '#9c36b5', modes: ['standard', 'quick'], glyph: 'Cu', noMirror: true, caps: { standard: 4, quick: 1 }, spawnPoint: true, stacksSpawner: true },
+  Cutemental: { size: 28, color: '#9c36b5', modes: ['standard', 'quick'], glyph: 'Cu', noMirror: true, caps: { standard: 4, quick: 1 }, spawnPoint: true, stacksSpawner: true },
 };
 const isStructureType = t => !!STRUCT_DEFS[t];
 // Structure types allowed to overlap the player spawner (Castle stacks on it).
