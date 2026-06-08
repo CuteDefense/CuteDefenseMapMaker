@@ -1631,15 +1631,27 @@ function saveMinimapPng() {
   downloadCanvasPng(name, scaledCanvas(mapCacheCanvas));
   toast('Saved ' + name, 'ok');
 }
-// Overlay image: just the walls in gray on a transparent background, 1px/cell
-// (256x256; upscaled by PNG_SCALE on export). Same orientation as the minimap;
-// true 2x2 footprints (precise occupancy).
+// Walls overlay: gray walls on a transparent background, sized for the game's
+// square minimap. Every mode except Horde crops to its playable area and centres it
+// (1:1, no stretch) inside a SQUARE whose side is the playable area's longest side,
+// so the overlay lines up with the square minimap. Horde exports the full 256x256
+// map. (1px/cell here; upscaled by PNG_SCALE on export.) Same y-flip + true 2x2
+// footprints as the minimap.
 function buildOverlayCanvas() {
+  const fullMap = state.gameMode === 'horde';
+  const a = fullMap ? { x0: 0, y0: 0, x1: GRID - 1, y1: GRID - 1 } : MODES[state.gameMode].area;
+  const W = a.x1 - a.x0 + 1, H = a.y1 - a.y0 + 1;
+  const S = Math.max(W, H);                       // square side = longest playable side
+  const ox = (S - W) >> 1, oy = (S - H) >> 1;     // centre the shorter axis
   const cv = document.createElement('canvas');
-  cv.width = GRID; cv.height = GRID;
+  cv.width = S; cv.height = S;
   const c = cv.getContext('2d');
   c.fillStyle = '#8a8f98';
-  for (const t of placedTiles) c.fillRect(t.x, GRID - (t.y + 2), 2, 2);  // y-flip to match the minimap
+  for (const t of placedTiles) {
+    if (t.x < a.x0 || t.x + 1 > a.x1 || t.y < a.y0 || t.y + 1 > a.y1) continue;  // only the exported area
+    const sx = ox + (t.x - a.x0), sy = oy + (t.y - a.y0);
+    c.fillRect(sx, S - (sy + 2), 2, 2);          // y-flip to match the minimap
+  }
   return cv;
 }
 function exportOverlayPng() {
