@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Bank version="1">
+    <Section name="TallShrubs">
+        <Key name="0">
+            <Value point="83,121"/>
+        </Key>
+        <Key name="1">
+            <Value point="107,115"/>
+        </Key>
+        <Key name="2">
+            <Value point="91,125"/>
+        </Key>
+        <Key name="3">
+            <Value point="117,97"/>
+        </Key>
+        <Key name="4">
+            <Value point="119,99"/>
+        </Key>
+        <Key name="5">
+            <Value point="105,115"/>
+        </Key>
+        <Key name="6">
+            <Value point="97,125"/>
+        </Key>
+        <Key name="7">
+            <Value point="97,95"/>
+        </Key>
+        <Key name="8">
+            <Value point="91,99"/>
+        </Key>
+        <Key name="9">
+            <Value point="121,95"/>
+        </Key>
+        <Key name="10">
+            <Value point="119,101"/>
+        </Key>
+        <Key name="11">
+            <Value point="109,95"/>
+        </Key>
+        <Key name="12">
+            <Value point="99,95"/>
+        </Key>
+        <Key name="13">
+            <Value point="95,125"/>
+        </Key>
+        <Key name="14">
+            <Value point="107,95"/>
+        </Key>
+        <Key name="15">
+            <Value point="91,97"/>
+        </Key>
+        <Key name="16">
+            <Value point="89,125"/>
+        </Key>
+        <Key name="17">
+            <Value point="119,107"/>
+        </Key>
+        <Key name="18">
+            <Value point="125,115"/>
+        </Key>
+        <Key name="19">
+            <Value point="83,95"/>
+        </Key>
+        <Key name="20">
+            <Value point="109,115"/>
+        </Key>
+        <Key name="21">
+            <Value point="119,115"/>
+        </Key>
+        <Key name="22">
+            <Value point="119,95"/>
+        </Key>
+        <Key name="23">
+            <Value point="91,101"/>
+        </Key>
+        <Key name="24">
+            <Value point="89,107"/>
+        </Key>
+        <Key name="25">
+            <Value point="83,103"/>
+        </Key>
+        <Key name="26">
+            <Value point="119,105"/>
+        </Key>
+        <Key name="27">
+            <Value point="123,95"/>
+        </Key>
+        <Key name="28">
+            <Value point="83,125"/>
+        </Key>
+        <Key name="29">
+            <Value point="113,109"/>
+        </Key>
+        <Key name="30">
+            <Value point="117,111"/>
+        </Key>
+        <Key name="31">
+            <Value point="105,123"/>
+        </Key>
+        <Key name="32">
+            <Value point="115,111"/>
+        </Key>
+        <Key name="33">
+            <Value point="87,95"/>
+        </Key>
+        <Key name="34">
+            <Value point="91,95"/>
+        </Key>
+        <Key name="35">
+            <Value point="113,95"/>
+        </Key>
+        <Key name="36">
+            <Value point="83,115"/>
+        </Key>
+        <Key name="37">
+            <Value point="123,115"/>
+        </Key>
+        <Key name="38">
+            <Value point="113,113"/>
+        </Key>
+        <Key name="39">
+            <Value point="113,105"/>
+        </Key>
+        <Key name="40">
+            <Value point="83,119"/>
+        </Key>
+        <Key name="41">
+            <Value point="113,99"/>
+        </Key>
+        <Key name="42">
+            <Value point="83,105"/>
+        </Key>
+        <Key name="43">
+            <Value point="85,95"/>
+        </Key>
+        <Key name="44">
+            <Value point="87,125"/>
+        </Key>
+        <Key name="45">
+            <Value point="83,123"/>
+        </Key>
+        <Key name="46">
+            <Value point="121,115"/>
+        </Key>
+        <Key name="47">
+            <Value point="111,95"/>
+        </Key>
+        <Key name="48">
+            <Value point="83,99"/>
+        </Key>
+        <Key name="49">
+            <Value point="119,109"/>
+        </Key>
+        <Key name="50">
+            <Value point="125,95"/>
+        </Key>
+        <Key name="51">
+            <Value point="105,125"/>
+        </Key>
+        <Key name="52">
+            <Value point="113,103"/>
+        </Key>
+        <Key name="53">
+            <Value point="117,99"/>
+        </Key>
+        <Key name="54">
+            <Value point="89,95"/>
+        </Key>
+        <Key name="55">
+            <Value point="83,97"/>
+        </Key>
+        <Key name="56">
+            <Value point="93,125"/>
+        </Key>
+        <Key name="57">
+            <Value point="111,115"/>
+        </Key>
+        <Key name="58">
+            <Value point="91,107"/>
+        </Key>
+        <Key name="59">
+            <Value point="113,111"/>
+        </Key>
+        <Key name="60">
+            <Value point="101,95"/>
+        </Key>
+        <Key name="61">
+            <Value point="87,107"/>
+        </Key>
+        <Key name="62">
+            <Value point="83,109"/>
+        </Key>
+        <Key name="63">
+            <Value point="119,113"/>
+        </Key>
+        <Key name="64">
+            <Value point="117,95"/>
+        </Key>
+        <Key name="65">
+            <Value point="99,125"/>
+        </Key>
+        <Key name="66">
+            <Value point="85,125"/>
+        </Key>
+        <Key name="67">
+            <Value point="103,125"/>
+        </Key>
+        <Key name="68">
+            <Value point="113,107"/>
+        </Key>
+        <Key name="69">
+            <Value point="119,103"/>
+        </Key>
+        <Key name="70">
+            <Value point="113,101"/>
+        </Key>
+        <Key name="71">
+            <Value point="93,95"/>
+        </Key>
+        <Key name="72">
+            <Value point="119,111"/>
+        </Key>
+        <Key name="73">
+            <Value point="85,107"/>
+        </Key>
+        <Key name="74">
+            <Value point="83,117"/>
+        </Key>
+        <Key name="75">
+            <Value point="113,115"/>
+        </Key>
+        <Key name="76">
+            <Value point="105,117"/>
+        </Key>
+        <Key name="77">
+            <Value point="95,95"/>
+        </Key>
+        <Key name="78">
+            <Value point="113,97"/>
+        </Key>
+        <Key name="79">
+            <Value point="83,107"/>
+        </Key>
+        <Key name="80">
+            <Value point="83,101"/>
+        </Key>
+        <Key name="81">
+            <Value point="101,125"/>
+        </Key>
+        <Key name="82">
+            <Value point="101,127"/>
+        </Key>
+    </Section>
+    <Section name="Flowers">
+    </Section>
+    <Section name="RedFlowers">
+    </Section>
+    <Section name="BlueFlowers">
+    </Section>
+    <Section name="Count">
+        <Key name="TallShrubs">
+            <Value int="83"/>
+        </Key>
+        <Key name="Flowers">
+            <Value int="0"/>
+        </Key>
+        <Key name="RedFlowers">
+            <Value int="0"/>
+        </Key>
+        <Key name="BlueFlowers">
+            <Value int="0"/>
+        </Key>
+        <Key name="PlayerSpawner">
+            <Value int="1"/>
+        </Key>
+        <Key name="Spawner">
+            <Value int="0"/>
+        </Key>
+        <Key name="Castle">
+            <Value int="1"/>
+        </Key>
+        <Key name="Fountain">
+            <Value int="0"/>
+        </Key>
+        <Key name="Tower">
+            <Value int="0"/>
+        </Key>
+        <Key name="Merchant">
+            <Value int="1"/>
+        </Key>
+        <Key name="Market">
+            <Value int="1"/>
+        </Key>
+        <Key name="Cutemental">
+            <Value int="0"/>
+        </Key>
+    </Section>
+    <Section name="PlayerSpawner">
+        <Key name="0">
+            <Value point="128,128"/>
+        </Key>
+    </Section>
+    <Section name="Spawner">
+    </Section>
+    <Section name="Castle">
+        <Key name="0">
+            <Value point="128,128"/>
+        </Key>
+    </Section>
+    <Section name="Fountain">
+    </Section>
+    <Section name="Tower">
+    </Section>
+    <Section name="Merchant">
+        <Key name="0">
+            <Value point="116,114"/>
+        </Key>
+    </Section>
+    <Section name="Market">
+        <Key name="0">
+            <Value point="104,128"/>
+        </Key>
+    </Section>
+    <Section name="Cutemental">
+    </Section>
+    <Section name="Disabled Mirror">
+        <Key name="Horizontal">
+            <Value flag="0"/>
+        </Key>
+        <Key name="Vertical">
+            <Value flag="0"/>
+        </Key>
+    </Section>
+</Bank>
