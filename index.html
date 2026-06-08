@@ -201,10 +201,10 @@
   #toast.ok { border-color: var(--ok); }
 
   #minimap {
-    position: absolute; right: 10px; bottom: 10px; width: 220px; height: 220px;
+    position: absolute; right: 10px; bottom: 10px; width: 256px; height: 256px;
     border: 1px solid var(--line); border-radius: 6px; background: #0b0c10;
     cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.45);
-    image-rendering: pixelated;   /* crisp, no blur when scaling the 256px cache */
+    image-rendering: pixelated;   /* crisp, no blur — JS keeps the backing an integer multiple of 256 */
   }
   #minimap.hidden { display: none; }
 </style>
@@ -260,6 +260,15 @@
     </div>
 
     <div class="group">
+      <div class="label">Presets</div>
+      <div class="slotrow">
+        <span class="slotlbl">Preset</span>
+        <select id="presetSelect" class="select slotsel" disabled><option>&mdash; scanning&hellip; &mdash;</option></select>
+      </div>
+      <div class="hint">Presets for the current mode, auto-detected read-only from a <code>presets/</code> folder beside this page (<code>&lt;Mode&gt; - &lt;Map Name&gt;.SC2Bank</code>). Needs the page <b>served over http(s)</b> &mdash; GitHub Pages, or <code>python -m http.server</code> locally; a <code>file://</code> page can't read the folder. Saving never writes here.</div>
+    </div>
+
+    <div class="group">
       <div class="label">Mirror</div>
       <div class="toggle">
         <label for="mirrorH">Horizontal (top &harr; bottom)</label>
@@ -294,15 +303,6 @@
       <button class="btn" id="minimapPngBtn">Save minimap PNG</button>
       <button class="btn" id="clearBtn">Clear map</button>
       <input type="file" id="fileInput" accept=".SC2Bank,.xml,text/xml" hidden>
-    </div>
-
-    <div class="group">
-      <div class="label">Presets</div>
-      <div class="slotrow">
-        <span class="slotlbl">Preset</span>
-        <select id="presetSelect" class="select slotsel" disabled><option>&mdash; scanning&hellip; &mdash;</option></select>
-      </div>
-      <div class="hint">Auto-detected read-only from a <code>presets/</code> folder beside this page (files named <code>&lt;Mode&gt; - &lt;Map Name&gt;.SC2Bank</code>); pick one to load it. Works when the page is <b>served over http(s)</b> &mdash; GitHub Pages (lists via the GitHub API), or <code>python -m http.server</code> locally. A double-clicked <code>file://</code> page can't read the folder. Saving never writes here, so a preset is never saved over.</div>
     </div>
 
     <div class="group">
@@ -410,7 +410,7 @@ const MAZE_LANES  = [
 ];
 const MAZE_CORNER_INSET = 4;   // the 5th square in from each lane corner (e.g. 92->96) is unbuildable
 // Tower Defense: a centred build pad — playable 75,87..180,168, buildable only the
-// inner 84,96..171,159 (a uniform 9-cell non-build ring). No forced mirror.
+// inner 82,94..173,161 (a uniform 7-cell non-build ring). No forced mirror.
 const TD_AREA = { x0: 75, y0: 87, x1: 180, y1: 168 };
 // Tug of War: a wide left/right-mirrored lane (forced vertical mirror). Two teams;
 // spawners are forced at 6,104 and 6,151 (left) and mirror to the right.
@@ -433,7 +433,7 @@ const MODES = {
   attrition:{ label: 'Attrition',   forceH: true,  forceV: false, noV: true,  allowSpawner: false, psDefault: { x: 195, y: 72  }, area: ATTRITION_AREA, bars: [ATTRITION_BLACK],        corners: false, dim: true,  buildMargin: 0 },  // forced H mirror, V disabled; 4x4 centred in the bottom half, mirrored to the top
   horde:    { label: 'Horde',       forceH: false, forceV: false, allowSpawner: false, psDefault: { x: 126, y: 126 }, area: HORDE_AREA,  bars: [],                          corners: false, dim: true,  buildMargin: 2 },  // 2-cell no-build ring; player spawn centred on 128,128
   maze:     { label: 'Maze Wars',   forceH: true,  forceV: true,  allowSpawner: false, psDefault: { x: 108, y: 108 }, lanes: MAZE_LANES, cornerInset: MAZE_CORNER_INSET, area: MAZE_AREA, bars: [MAZE_CROSS_V, MAZE_CROSS_H], corners: false, dim: true, buildMargin: 0 },  // 4 lanes split by a central cross; both mirrors forced -> one player spawner mirrors into all four lanes; per-lane-corner no-build cells
-  td:       { label: 'Tower Defense', forceH: false, forceV: false, allowSpawner: false, psDefault: { x: 126, y: 126 }, area: TD_AREA, bars: [], corners: false, dim: true, buildMargin: 9 },  // central player spawn; build only the inner 84,96..171,159 (9-cell no-build ring); both mirrors allowed
+  td:       { label: 'Tower Defense', forceH: false, forceV: false, allowSpawner: false, psDefault: { x: 126, y: 126 }, area: TD_AREA, bars: [], corners: false, dim: true, buildMargin: 7 },  // central player spawn; build only the inner 82,94..173,161 (7-cell no-build ring); both mirrors allowed
   tow:      { label: 'Tug of War',  forceH: false, forceV: true, allowSpawner: true, psDefault: { x: 56, y: 126 }, spawnerDefaults: TOW_SPAWNER_DEFAULTS, area: TOW_AREA, bars: [], corners: false, dim: true, buildMargin: 0 },  // vertical mirror forced = left/right teams (one player spawner + one Castle per team); horizontal mirror toggleable; spawners forced at 6,104 & 6,151; Castle/Fountain/Tower buildings
 };
 
@@ -567,7 +567,8 @@ let viewW = 1, viewH = 1; // CSS px dimensions of the canvas
 
 // Minimap (bottom-right) + an offscreen 1px-per-cell cache of the whole map so
 // the minimap only re-renders the map image when tiles/mode change, not on pan.
-const MM = 220;            // minimap CSS size (square, matches the square map)
+const MM = 256;            // minimap target size (square). 256 = one CSS px per grid cell at dpr 1
+let   MM_CELL = 1;         // device px per grid cell — always an integer so every cell is equal width
 const minimap = document.getElementById('minimap');
 const mmCtx = minimap.getContext('2d');
 const mapCacheCanvas = document.createElement('canvas');
@@ -1611,16 +1612,28 @@ function downloadCanvasPng(filename, cv) {
   a.click();
   a.remove();
 }
-// Full minimap image (background + walls), always 256x256.
+// Nearest-neighbour upscale of a GRID-sized canvas by a whole number, so every grid
+// cell becomes an equal PNG_SCALE x PNG_SCALE block (no thin/narrow cells).
+const PNG_SCALE = 4;       // exported PNGs are 256*PNG_SCALE square (1024x1024)
+function scaledCanvas(src) {
+  const cv = document.createElement('canvas');
+  cv.width = src.width * PNG_SCALE; cv.height = src.height * PNG_SCALE;
+  const c = cv.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.drawImage(src, 0, 0, cv.width, cv.height);
+  return cv;
+}
+// Full minimap image (background + walls), 256 cells x PNG_SCALE = 1024x1024.
 function saveMinimapPng() {
   renderMapCache();                 // ensure the cache is current
   mapCacheDirty = false;
   const name = mapBaseName() + '_minimap.png';
-  downloadCanvasPng(name, mapCacheCanvas);
+  downloadCanvasPng(name, scaledCanvas(mapCacheCanvas));
   toast('Saved ' + name, 'ok');
 }
-// Overlay image: just the walls in gray on a transparent background, 256x256.
-// Same orientation as the minimap; true 2x2 footprints (precise occupancy).
+// Overlay image: just the walls in gray on a transparent background, 1px/cell
+// (256x256; upscaled by PNG_SCALE on export). Same orientation as the minimap;
+// true 2x2 footprints (precise occupancy).
 function buildOverlayCanvas() {
   const cv = document.createElement('canvas');
   cv.width = GRID; cv.height = GRID;
@@ -1631,7 +1644,7 @@ function buildOverlayCanvas() {
 }
 function exportOverlayPng() {
   const name = mapBaseName() + '_overlay.png';
-  downloadCanvasPng(name, buildOverlayCanvas());
+  downloadCanvasPng(name, scaledCanvas(buildOverlayCanvas()));
   toast('Exported ' + name, 'ok');
 }
 
@@ -1843,20 +1856,24 @@ async function discoverPresets() {
     .sort((a, b) => a.name.localeCompare(b.name));
   populatePresetSelect();
 }
+// List only the presets valid for the current mode, by map name alone. Option
+// values stay as the index into presetFiles so loadSelectedPreset is unchanged.
 function populatePresetSelect() {
   const sel = document.getElementById('presetSelect');
   sel.innerHTML = '';
-  if (!presetFiles.length) {
-    sel.innerHTML = '<option>— no presets found —</option>';
+  const inMode = presetFiles.filter(p => p.mode === state.gameMode);
+  if (!inMode.length) {
+    sel.innerHTML = '<option>— no presets —</option>';
     sel.disabled = true; return;
   }
   const ph = document.createElement('option');
-  ph.value = ''; ph.textContent = `— choose preset (${presetFiles.length}) —`;
+  ph.value = ''; ph.textContent = '— choose preset —';
   sel.appendChild(ph);
   presetFiles.forEach((p, i) => {
+    if (p.mode !== state.gameMode) return;
     const o = document.createElement('option');
     o.value = String(i);
-    o.textContent = `${MODES[p.mode].label} · ${p.mapName}`;
+    o.textContent = p.mapName;            // name only
     sel.appendChild(o);
   });
   sel.disabled = false;
@@ -2371,18 +2388,18 @@ function renderMapCache() {
   for (const sp of spawners) mcFill(sp.x, sp.y, sp.x + SP_SIZE, sp.y + SP_SIZE, SP_COLOR);
 }
 function drawMinimap() {
-  const dpr = window.devicePixelRatio || 1;
-  mmCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  mmCtx.clearRect(0, 0, MM, MM);
+  const px = GRID * MM_CELL;                  // backing-store size (device px), a multiple of GRID
+  mmCtx.setTransform(1, 0, 0, 1, 0, 0);       // work directly in backing pixels
+  mmCtx.clearRect(0, 0, px, px);
   mmCtx.imageSmoothingEnabled = false;
-  mmCtx.drawImage(mapCacheCanvas, 0, 0, GRID, GRID, 0, 0, MM, MM);
-  // current viewport rectangle
+  mmCtx.drawImage(mapCacheCanvas, 0, 0, GRID, GRID, 0, 0, px, px);  // integer scale -> every cell MM_CELL px
+  // current viewport rectangle (cells -> backing px)
   const tl = screenToWorld(0, 0), br = screenToWorld(viewW, viewH);
   const wx0 = clamp(Math.min(tl.x, br.x), 0, GRID), wx1 = clamp(Math.max(tl.x, br.x), 0, GRID);
   const wy0 = clamp(Math.min(tl.y, br.y), 0, GRID), wy1 = clamp(Math.max(tl.y, br.y), 0, GRID);
-  const rx = wx0 / GRID * MM, rw = (wx1 - wx0) / GRID * MM;
-  const ry = (GRID - wy1) / GRID * MM, rh = (wy1 - wy0) / GRID * MM;
-  mmCtx.lineWidth = 1.5;
+  const rx = wx0 * MM_CELL, rw = (wx1 - wx0) * MM_CELL;
+  const ry = (GRID - wy1) * MM_CELL, rh = (wy1 - wy0) * MM_CELL;
+  mmCtx.lineWidth = Math.max(1, MM_CELL);
   mmCtx.strokeStyle = 'rgba(255,255,255,0.9)';
   mmCtx.strokeRect(rx + 0.75, ry + 0.75, Math.max(2, rw - 1.5), Math.max(2, rh - 1.5));
 }
@@ -2774,6 +2791,7 @@ function syncControls() {                   // reflect state -> UI (after load /
   const m = document.getElementById('mode');
   if (m) m.value = state.gameMode;
   buildPalette();                           // refresh disabled state of the Spawner swatch
+  populatePresetSelect();                   // re-filter the preset list for the current mode
 }
 
 function updateMeta() {
@@ -2831,12 +2849,19 @@ function clearMap() {
   toast('Map cleared', 'ok');
 }
 
+// Size the minimap so the 256-cell map scales by a whole number of device pixels
+// per cell — otherwise nearest-neighbour leaves some rows/cols 1px and others 0/2px
+// (the "thin/narrow" grid lines). MM_CELL is that integer; the backing store is a
+// multiple of GRID, and the CSS box is backing/dpr so it maps 1:1 to device pixels
+// (no second, fractional re-scale by the browser).
 function setupMinimap() {
   const dpr = window.devicePixelRatio || 1;
-  minimap.width = Math.floor(MM * dpr);
-  minimap.height = Math.floor(MM * dpr);
-  minimap.style.width = MM + 'px';
-  minimap.style.height = MM + 'px';
+  MM_CELL = Math.max(1, Math.round(MM * dpr / GRID));
+  const backing = GRID * MM_CELL;
+  minimap.width = backing;
+  minimap.height = backing;
+  minimap.style.width = (backing / dpr) + 'px';
+  minimap.style.height = (backing / dpr) + 'px';
 }
 function setMinimap(on) {
   state.showMinimap = on;
