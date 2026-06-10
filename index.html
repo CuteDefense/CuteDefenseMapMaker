@@ -255,7 +255,11 @@
         <option value="horde">Horde</option>
         <option value="maze">Maze Wars</option>
         <option value="td">Tower Defense</option>
+        <option value="towermaze">Tower Maze</option>
         <option value="tow">Tug of War</option>
+        <option value="predator">Predator</option>
+        <option value="chickenclub">Chicken Club</option>
+        <option value="roguecrawl">Rogue Crawl</option>
       </select>
     </div>
 
@@ -265,7 +269,6 @@
         <span class="slotlbl">Preset</span>
         <select id="presetSelect" class="select slotsel" disabled><option>&mdash; scanning&hellip; &mdash;</option></select>
       </div>
-      <div class="hint">Presets for the current mode, auto-detected read-only from a <code>presets/</code> folder beside this page (<code>&lt;Mode&gt; - &lt;Map Name&gt;.SC2Bank</code>). Needs the page <b>served over http(s)</b> &mdash; GitHub Pages, or <code>python -m http.server</code> locally; a <code>file://</code> page can't read the folder. Saving never writes here.</div>
     </div>
 
     <div class="group">
@@ -284,7 +287,7 @@
     <div class="group">
       <div class="label">Map</div>
       <div class="status" id="validity"><span class="led"></span><span class="txt">—</span></div>
-      <div class="hint">Pathing checks two phases. Red &amp; blue flowers are walls only in their own phase, so a room walled with both keeps a door open each phase. Tall shrubs &amp; yellow flowers always block. A 2-tile map border is unbuildable; Versus mode splits the field into two mirrored lanes.</div>
+      <div class="hint">Pathing checks two phases. Red &amp; blue flowers are walls only in their own phase, so a room walled with both keeps a door open each phase. Tall shrubs &amp; yellow flowers always block.</div>
       <div class="row">
         <button class="btn" id="undoBtn" disabled>Undo</button>
         <button class="btn" id="redoBtn" disabled>Redo</button>
@@ -396,26 +399,87 @@ const ATTRITION_AREA  = { x0: 140, y0: 34,  x1: 253, y1: 221 };  // attrition pl
 const ATTRITION_BLACK = { x0: 140, y0: 114, x1: 253, y1: 141 };  // attrition horizontal divider (top/bottom halves)
 const HORDE_AREA   = { x0: 76,  y0: 88, x1: 179, y1: 167 };  // horde playable (walkable); inner 2-cell ring is no-build
 // Maze Wars: a 75x75 playable square split by a 2-cell cross into four lanes. The
-// cross (vertical x=128..129, horizontal y=128..129) carves the area into BL/BR/
+// cross (vertical x=127..128, horizontal y=127..128) carves the area into BL/BR/
 // TL/TR quadrants. Both mirrors are forced on, so the bottom-left lane is the
 // canonical design and the other three (plus the player spawner) mirror from it.
-const MAZE_AREA   = { x0: 92,  y0: 92, x1: 166, y1: 166 };
-const MAZE_CROSS_V = { x0: 128, y0: 92,  x1: 129, y1: 166 };  // vertical bar (full height)
-const MAZE_CROSS_H = { x0: 92,  y0: 128, x1: 166, y1: 129 };  // horizontal bar (full width)
+const MAZE_AREA   = { x0: 91,  y0: 91, x1: 165, y1: 165 };
+const MAZE_CROSS_V = { x0: 127, y0: 91,  x1: 128, y1: 165 };  // vertical bar (full height)
+const MAZE_CROSS_H = { x0: 91,  y0: 127, x1: 165, y1: 128 };  // horizontal bar (full width)
 const MAZE_LANES  = [
-  { x0: 92,  y0: 92,  x1: 127, y1: 127 },   // bottom-left
-  { x0: 130, y0: 92,  x1: 166, y1: 127 },   // bottom-right
-  { x0: 92,  y0: 130, x1: 127, y1: 166 },   // top-left
-  { x0: 130, y0: 130, x1: 166, y1: 166 },   // top-right
+  { x0: 91,  y0: 91,  x1: 126, y1: 126 },   // bottom-left
+  { x0: 129, y0: 91,  x1: 165, y1: 126 },   // bottom-right
+  { x0: 91,  y0: 129, x1: 126, y1: 165 },   // top-left
+  { x0: 129, y0: 129, x1: 165, y1: 165 },   // top-right
 ];
-const MAZE_CORNER_INSET = 4;   // the 5th square in from each lane corner (e.g. 92->96) is unbuildable
+const MAZE_CORNER_INSET = 4;   // the 5th square in from each lane corner (e.g. 91->95) is unbuildable
 // Tower Defense: a centred build pad — playable 75,87..180,168, buildable only the
 // inner 82,94..173,161 (a uniform 7-cell non-build ring). No forced mirror.
 const TD_AREA = { x0: 75, y0: 87, x1: 180, y1: 168 };
+// Tower Maze: a 48x48 build arena (104,104..151,151) with nine forced-unbuildable
+// 2x2 squares in a 3x3 layout — the exact centre, four corners, four edge midpoints.
+// The non-centre squares sit 4 cells in from the playable edge. All are walkable
+// (units path through) but no tower may be built on them.
+const TM_AREA = { x0: 104, y0: 104, x1: 151, y1: 151 };
+const TM_BLOCKS = [
+  { x0: 108, y0: 108, x1: 109, y1: 109 },  // bottom-left corner
+  { x0: 127, y0: 108, x1: 128, y1: 109 },  // south  (bottom edge mid)
+  { x0: 146, y0: 108, x1: 147, y1: 109 },  // bottom-right corner
+  { x0: 108, y0: 127, x1: 109, y1: 128 },  // west   (left edge mid)
+  { x0: 127, y0: 127, x1: 128, y1: 128 },  // exact centre
+  { x0: 146, y0: 127, x1: 147, y1: 128 },  // east   (right edge mid)
+  { x0: 108, y0: 146, x1: 109, y1: 147 },  // top-left corner
+  { x0: 127, y0: 146, x1: 128, y1: 147 },  // north  (top edge mid)
+  { x0: 146, y0: 146, x1: 147, y1: 147 },  // top-right corner
+];
 // Tug of War: a wide left/right-mirrored lane (forced vertical mirror). Two teams;
 // spawners are forced at 6,104 and 6,151 (left) and mirror to the right.
 const TOW_AREA = { x0: 2, y0: 100, x1: 253, y1: 155 };
 const TOW_SPAWNER_DEFAULTS = [{ x: 6, y: 104 }, { x: 6, y: 151 }];
+// Predator: the full Standard playable area, but with a large unplayable block in
+// the middle (76,88..179,167). A small playable "arena" is carved back into the
+// centre of that block (116,122..139,133) for a minigame — walkable for pathing
+// but never buildable. No spawners exist; the only placeable is the 8x8
+// Predatorling Spawn, built in the outer ring around the central block.
+const PRED_BLACK = { x0: 76,  y0: 88,  x1: 179, y1: 167 };  // central unplayable block
+const PRED_ARENA = { x0: 116, y0: 122, x1: 139, y1: 133 };  // playable minigame arena (no-build)
+// Chicken Club: a battle-royale arena that GROWS with the player count. The base
+// square 124,124..132,132 expands 2 cells per player in every direction, so an
+// n-player game (2..10) spans 124-2n..132+2n; the editor builds in the 10-player
+// maximum (104,104..152,152). Players spawn on a ring 2n+2 cells from the arena
+// centre. Pathing is validated at EVERY size because the arena shrinks as players
+// die — the maze must stay one connected region at each player count.
+const CHICKEN_MIN = 2, CHICKEN_MAX = 10;
+const CHICKEN_BASE = { x0: 124, y0: 124, x1: 132, y1: 132 };
+const CHICKEN_CENTER = (CHICKEN_BASE.x0 + CHICKEN_BASE.x1 + 1) / 2;   // world centre = 128.5
+function chickenArea(n) {                       // playable square for n players
+  const e = 2 * n;
+  return { x0: CHICKEN_BASE.x0 - e, y0: CHICKEN_BASE.y0 - e, x1: CHICKEN_BASE.x1 + e, y1: CHICKEN_BASE.y1 + e };
+}
+function chickenSpawnRadius(n) { return 2 * n + 2; }   // spawn-ring radius (cells) for n players
+const CHICKEN_AREA = chickenArea(CHICKEN_MAX);  // 104,104..152,152 — the buildable maximum
+// Rogue Crawl: a SPECIAL builder — a 10x10 grid of typed ROOMS (not walls). Each cell is
+// empty or one of 4 types (1=spawn, 2=path, 3=special, 4=boss); only one spawn and one
+// boss may exist, and every placed room must be connected (4-adjacency). Room id (0,0) is
+// bottom-left, (9,9) top-right. For editing/hit-testing each room maps to a ROGUE_ROOM-cell
+// square; the 10x10 grid is centred on the map. Exports as gv_rogueCrawlRooms[x][y] = z.
+const ROGUE_N = 10;                              // 10x10 rooms
+const ROGUE_ROOM = 20;                           // world cells per room (rendering / clicks)
+const ROGUE_ORIGIN = (GRID - ROGUE_N * ROGUE_ROOM) / 2;   // 28 -> grid centred on the map
+const ROGUE_AREA = { x0: ROGUE_ORIGIN, y0: ROGUE_ORIGIN, x1: ROGUE_ORIGIN + ROGUE_N * ROGUE_ROOM - 1, y1: ROGUE_ORIGIN + ROGUE_N * ROGUE_ROOM - 1 };
+// Room types — id is the exported z value; single = at most one allowed on the grid.
+const ROGUE_TYPES = {
+  RogueSpawn:   { id: 1, label: 'Spawn',   color: '#0ca678', single: true },
+  RoguePath:    { id: 2, label: 'Path',    color: '#868e96' },
+  RogueSpecial: { id: 3, label: 'Special', color: '#f59f00' },
+  RogueBoss:    { id: 4, label: 'Boss',    color: '#e03131', single: true },
+};
+const ROGUE_BY_ID = { 1: 'RogueSpawn', 2: 'RoguePath', 3: 'RogueSpecial', 4: 'RogueBoss' };
+const rogueIdx = (rx, ry) => ry * ROGUE_N + rx;
+function roomAtWorld(cx, cy) {                   // world cell -> {rx,ry} room, or null if outside the grid
+  const rx = Math.floor((cx - ROGUE_ORIGIN) / ROGUE_ROOM);
+  const ry = Math.floor((cy - ROGUE_ORIGIN) / ROGUE_ROOM);
+  return (rx < 0 || rx >= ROGUE_N || ry < 0 || ry >= ROGUE_N) ? null : { rx, ry };
+}
 
 // Game modes. forceH/forceV = mirrors locked on; allowSpawner gates the 1x1
 // spawner; psDefault is the canonical Player-Spawner anchor; area = playable
@@ -424,7 +488,12 @@ const TOW_SPAWNER_DEFAULTS = [{ x: 6, y: 104 }, { x: 6, y: 151 }];
 // = a no-build ring (cells) inside the playable area (walkable but not buildable).
 // psMulti (Maze Wars) = N independent player spawners (no mirror orbit) seeded
 // from psDefaults; lanes + cornerInset mark the 5th cell in from each lane corner
-// unbuildable.
+// unbuildable. spawnerCap overrides the 1x1-Spawner cap (default 8; Predator 4).
+// playerSpawnId (Predator) forces the exported player-spawn id (0). noSpawners
+// (Chicken Club) = no Player/1x1 Spawner at all (palette items hidden, none seeded).
+// holes = playable rectangles carved back INTO a bar (a walkable island inside an
+// unplayable block); noBuild = interior rectangles that stay walkable but never
+// buildable (Predator's minigame arena; Tower Maze's nine forced-unbuildable squares).
 const MODES = {
   standard: { label: 'Standard',    forceH: false, forceV: false, allowSpawner: true,  psDefault: { x: 126, y: 126 }, area: NORMAL_AREA, bars: [],                          corners: false, dim: true,  buildMargin: 0 },
   versus:   { label: 'Versus',      forceH: false, forceV: true,  allowSpawner: false, psDefault: { x: 56,  y: 126 }, area: VERSUS_AREA, bars: [VERSUS_BLACK],               corners: false, dim: true,  buildMargin: 0 },
@@ -432,9 +501,13 @@ const MODES = {
   quick:    { label: 'Quick',       forceH: false, forceV: false, noH: true,  allowSpawner: true,  psDefault: { x: 126, y: 126 }, area: QUICK_AREA,  bars: [],                          corners: false, dim: true,  buildMargin: 0 },  // 4x4 anchor 126 -> centred on 128,128; H mirror disabled
   attrition:{ label: 'Attrition',   forceH: true,  forceV: false, noV: true,  allowSpawner: false, psDefault: { x: 195, y: 72  }, area: ATTRITION_AREA, bars: [ATTRITION_BLACK],        corners: false, dim: true,  buildMargin: 0 },  // forced H mirror, V disabled; 4x4 centred in the bottom half, mirrored to the top
   horde:    { label: 'Horde',       forceH: false, forceV: false, allowSpawner: false, psDefault: { x: 126, y: 126 }, area: HORDE_AREA,  bars: [],                          corners: false, dim: true,  buildMargin: 2 },  // 2-cell no-build ring; player spawn centred on 128,128
-  maze:     { label: 'Maze Wars',   forceH: true,  forceV: true,  allowSpawner: false, psDefault: { x: 108, y: 108 }, lanes: MAZE_LANES, cornerInset: MAZE_CORNER_INSET, area: MAZE_AREA, bars: [MAZE_CROSS_V, MAZE_CROSS_H], corners: false, dim: true, buildMargin: 0 },  // 4 lanes split by a central cross; both mirrors forced -> one player spawner mirrors into all four lanes; per-lane-corner no-build cells
+  maze:     { label: 'Maze Wars',   forceH: true,  forceV: true,  allowSpawner: false, psDefault: { x: 107, y: 107 }, lanes: MAZE_LANES, cornerInset: MAZE_CORNER_INSET, area: MAZE_AREA, bars: [MAZE_CROSS_V, MAZE_CROSS_H], corners: false, dim: true, buildMargin: 0 },  // 4 lanes split by a central cross; both mirrors forced -> one player spawner mirrors into all four lanes; per-lane-corner no-build cells
   td:       { label: 'Tower Defense', forceH: false, forceV: false, allowSpawner: false, psDefault: { x: 126, y: 126 }, area: TD_AREA, bars: [], corners: false, dim: true, buildMargin: 7 },  // central player spawn; build only the inner 82,94..173,161 (7-cell no-build ring); both mirrors allowed
   tow:      { label: 'Tug of War',  forceH: false, forceV: true, allowSpawner: true, psDefault: { x: 56, y: 126 }, spawnerDefaults: TOW_SPAWNER_DEFAULTS, area: TOW_AREA, bars: [], corners: false, dim: true, buildMargin: 0 },  // vertical mirror forced = left/right teams (one player spawner + one Castle per team); horizontal mirror toggleable; spawners forced at 6,104 & 6,151; Castle/Fountain/Tower buildings
+  towermaze:{ label: 'Tower Maze',  forceH: false, forceV: false, allowSpawner: false, psOnUnbuildable: true, psDefault: { x: 126, y: 126 }, area: TM_AREA, bars: [], noBuild: TM_BLOCKS, corners: false, dim: true, buildMargin: 0 },  // 48x48 build arena; nine forced-unbuildable 2x2 squares (centre + corners + edge mids; non-centre inset 4); central player spawn (may sit on the unbuildable squares), no 1x1 spawners
+  predator: { label: 'Predator',    forceH: false, forceV: false, allowSpawner: true, spawnerCap: 4, playerSpawnId: 0, psDefault: { x: 126, y: 44 }, area: NORMAL_AREA, bars: [PRED_BLACK], holes: [PRED_ARENA], noBuild: [PRED_ARENA], corners: false, dim: true, buildMargin: 0 },  // Standard playable area with a central unplayable block; a playable minigame arena (no-build) at its centre. One player spawner (id 0) + one Predatorling "predator spawner" (8x8, id 1) both save into the PlayerSpawner section; up to 4 regular 1x1 spawners
+  chickenclub:{ label: 'Chicken Club', forceH: false, forceV: false, allowSpawner: false, noSpawners: true, psDefault: { x: 126, y: 126 }, area: CHICKEN_AREA, bars: [], corners: false, dim: true, buildMargin: 0 },  // dynamic arena (2-10 players): base 124-132 grows 2 cells/player/direction; edited at the 10-player max (104-152). Per-size outlines + spawn rings; pathing validated at every size (it shrinks as players die). No spawners
+  roguecrawl:{ label: 'Rogue Crawl', forceH: false, forceV: false, allowSpawner: false, noSpawners: true, rogue: true, psDefault: { x: 126, y: 126 }, area: ROGUE_AREA, bars: [], corners: false, dim: true, buildMargin: 0 },  // SPECIAL builder: a 10x10 typed-room grid (spawn/path/special/boss). No walls/spawners; one spawn + one boss, all rooms connected; exports gv_rogueCrawlRooms[x][y]=z
 };
 
 // Spawner objects.
@@ -443,6 +516,8 @@ const PS_COLOR = '#0ca678';   // teal
 const SP_SIZE = 1;            // Spawner footprint (1x1)
 const SP_COLOR = '#f06595';   // pink
 const SPAWNER_CAP = 8;
+// Per-mode 1x1-Spawner cap (Predator limits to 4); falls back to the global cap.
+function spawnerCap() { return MODES[state.gameMode].spawnerCap ?? SPAWNER_CAP; }
 
 // Extra placeable buildings (currently Tug of War only). size = NxN footprint;
 // single = at most one canonical (still mirrored by the mode's forced mirror);
@@ -455,6 +530,11 @@ const STRUCT_DEFS = {
   Tower:    { size: 6, color: '#ff922b', modes: ['tow'], glyph: 'T' },
   Merchant: { size: 4, color: '#a61e4d', modes: ['horde', 'tow'], glyph: 'Me' },
   Market:   { size: 4, color: '#5c940d', modes: ['horde', 'tow'], glyph: 'Mk', galaxy: 'Marketplace' },  // game type name differs
+  // Predator-only 8x8 "Predatorling Spawn" = the predator spawner (exactly one). It is
+  // NOT a building — asPlayerSpawner routes it into the bank's PlayerSpawner section
+  // and the Galaxy export emits gf_InitializationMapSpawnPoint(cx,cy,spawnId), i.e. a
+  // second player type (spawnId 1) distinct from the normal player-spawn id 0.
+  Predatorling: { size: 8, color: '#e8590c', modes: ['predator'], glyph: 'Pl', caps: { predator: 1 }, asPlayerSpawner: true, spawnId: 1 },
   // noMirror: independent placements — never mirrored, every copy is canonical (so all
   // export even with a mirror on). caps = per-mode max count (ids run 0..count-1).
   // stacksSpawner = may overlap the 1x1 Spawner (and the Spawner may overlap it).
@@ -500,9 +580,24 @@ const PALETTE = [
   { type: 'Merchant',      label: 'Merchant',       color: STRUCT_DEFS.Merchant.color, structure: true, modes: STRUCT_DEFS.Merchant.modes },
   { type: 'Market',        label: 'Market',         color: STRUCT_DEFS.Market.color,   structure: true, modes: STRUCT_DEFS.Market.modes },
   { type: 'Cutemental',    label: 'Cutemental',     color: STRUCT_DEFS.Cutemental.color, structure: true, modes: STRUCT_DEFS.Cutemental.modes },
+  { type: 'Predatorling',  label: 'Predatorling Spawn', color: STRUCT_DEFS.Predatorling.color, structure: true, modes: STRUCT_DEFS.Predatorling.modes },
+  // Rogue Crawl room types (the only buildables in that mode).
+  { type: 'RogueSpawn',   label: 'Spawn',   color: ROGUE_TYPES.RogueSpawn.color,   rogue: true, modes: ['roguecrawl'] },
+  { type: 'RoguePath',    label: 'Path',    color: ROGUE_TYPES.RoguePath.color,    rogue: true, modes: ['roguecrawl'] },
+  { type: 'RogueSpecial', label: 'Special', color: ROGUE_TYPES.RogueSpecial.color, rogue: true, modes: ['roguecrawl'] },
+  { type: 'RogueBoss',    label: 'Boss',    color: ROGUE_TYPES.RogueBoss.color,    rogue: true, modes: ['roguecrawl'] },
 ];
-// A palette item is visible only in its modes (walls/spawners are mode-agnostic).
-const paletteVisible = item => !item.modes || item.modes.includes(state.gameMode);
+// A palette item is visible only in its modes (walls/spawners are mode-agnostic),
+// except modes flagged noSpawners (Chicken Club) hide both spawner swatches. Rogue
+// Crawl shows ONLY its 4 room types (walls/spawners/structures hidden); rogue items
+// never appear elsewhere.
+const paletteVisible = item => {
+  const cfg = MODES[state.gameMode];
+  if (cfg.rogue) return !!item.rogue;
+  if (item.rogue) return false;
+  if (item.spawner && cfg.noSpawners) return false;
+  return !item.modes || item.modes.includes(state.gameMode);
+};
 
 // Authoritative data model (per brief): a flat list of placed tiles.
 // The grid is DERIVED from this list, never stored as a full 2D tile array.
@@ -510,6 +605,7 @@ let placedTiles = [];                       // [{x, y, type}]
 let playerSpawners = [];                    // [{x,y}] 4x4 teal; one canonical + forced-mirror copies
 let spawners = [];                          // [{x,y}] 1x1; cap 8; disabled in versus/duos; mirrors in forced-mirror modes
 let structures = [];                        // [{type,x,y}] Castle/Fountain/Tower (Tug of War); full forced-mirror orbit stored
+let rogueRooms = new Uint8Array(ROGUE_N * ROGUE_N);  // Rogue Crawl: 10x10 room types (0=empty, 1-4); index = rogueIdx(rx,ry)
 const tileAt = new Map();                   // "x,y" anchor -> index into placedTiles (fast lookup)
 const occ = new Uint8Array(GRID * GRID);    // physical coverage bitmap: 1 = cell holds a tile (overlap test)
 // Path validity runs in two phases — "only red OR blue flowers exist at a time".
@@ -788,18 +884,25 @@ function footprintClearOfSpawners(ax, ay) {
 // 1x1 spawner, no structure. (ignorePlayer skips player-spawner overlap, used when
 // replacing it / for player-spawn-stacking; ignoreStruct = array of structure types
 // to skip — a single structure replacing itself, or types that stack with it;
-// ignoreSpawner skips 1x1-spawner overlap, used for structures that stack with it.)
-function objectFits(ax, ay, size, ignorePlayer, ignoreStruct, ignoreSpawner) {
+// ignoreSpawner skips 1x1-spawner overlap, used for structures that stack with it;
+// allowUnbuildable requires only playable (not buildable) cells — the player spawner
+// in Tower Maze, which may sit on the forced-unbuildable squares.)
+function objectFits(ax, ay, size, ignorePlayer, ignoreStruct, ignoreSpawner, allowUnbuildable) {
   if (ax < 0 || ay < 0 || ax > GRID - size || ay > GRID - size) return false;
   for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
     const cx = ax + dx, cy = ay + dy;
-    if (buildableBuf[cy * GRID + cx] !== 1) return false;
+    if (allowUnbuildable ? playableBuf[cy * GRID + cx] !== 1 : buildableBuf[cy * GRID + cx] !== 1) return false;
     if (occ[cy * GRID + cx]) return false;
     if (!ignoreSpawner && spawners.some(s => s.x === cx && s.y === cy)) return false;
     if (!ignorePlayer && playerSpawnerCovers(cx, cy)) return false;
     if (structureCovering(cx, cy, ignoreStruct)) return false;
   }
   return true;
+}
+// Player-spawner fit test — like objectFits but, in modes flagged psOnUnbuildable
+// (Tower Maze), the 4x4 spawn may rest on playable-but-unbuildable cells.
+function psFits(ax, ay, ignorePlayer) {
+  return objectFits(ax, ay, PS_SIZE, ignorePlayer, STACKS_PS_TYPES, false, !!MODES[state.gameMode].psOnUnbuildable);
 }
 // Generic NxN object orbit under explicit mirror booleans.
 function objOrbit(x, y, size, useH, useV) {
@@ -825,18 +928,19 @@ function psOrbit(x, y) { return objOrbit(x, y, PS_SIZE, forcedH(), forcedV()); }
 // Place / move the Player Spawner. Default modes have a single spawner (+ forced
 // mirrors); psMulti modes (Maze Wars) place independent spawners up to the cap.
 function placePlayerSpawner(cellX, cellY) {
+  if (MODES[state.gameMode].noSpawners) return false;   // Chicken Club: no player spawner
   const ax = clamp(cellX - (PS_SIZE >> 1), 0, GRID - PS_SIZE);
   const ay = clamp(cellY - (PS_SIZE >> 1), 0, GRID - PS_SIZE);
   const cap = MODES[state.gameMode].psMulti;
   if (cap) {                                   // independent, capped, no mirror orbit
     if (playerSpawners.length >= cap) return false;
-    if (!objectFits(ax, ay, PS_SIZE, false, STACKS_PS_TYPES)) return false;   // must clear other spawners too
+    if (!psFits(ax, ay, false)) return false;   // must clear other spawners too
     playerSpawners.push({ x: ax, y: ay });
     state.structuralChange = true; mapCacheDirty = true;
     return true;
   }
   const pts = psOrbit(ax, ay);
-  for (const p of pts) if (!objectFits(p.x, p.y, PS_SIZE, true, STACKS_PS_TYPES)) return false;  // ignore the one we replace
+  for (const p of pts) if (!psFits(p.x, p.y, true)) return false;  // ignore the one we replace
   playerSpawners = pts.map(p => ({ x: p.x, y: p.y }));
   state.structuralChange = true; mapCacheDirty = true;
   return true;
@@ -848,7 +952,7 @@ function placeSpawner(cellX, cellY) {
   if (!MODES[state.gameMode].allowSpawner) return false;
   const x = clamp(cellX, 0, GRID - 1), y = clamp(cellY, 0, GRID - 1);
   const pts = spOrbit(x, y);
-  if (spawners.length + pts.length > SPAWNER_CAP) return false;
+  if (spawners.length + pts.length > spawnerCap()) return false;
   for (const p of pts) if (!objectFits(p.x, p.y, SP_SIZE, false, STACKS_SPAWNER_TYPES)) return false;
   for (const p of pts) spawners.push({ x: p.x, y: p.y });
   state.structuralChange = true; mapCacheDirty = true;
@@ -889,9 +993,10 @@ function ensureSpawnerDefaults() {
 function ensurePlayerSpawner() {
   if (playerSpawners.length) return;
   const cfg = MODES[state.gameMode];
+  if (cfg.noSpawners) return;                 // Chicken Club: never seed a player spawner
   if (cfg.psMulti) {
     playerSpawners = (cfg.psDefaults || [])
-      .filter(d => objectFits(d.x, d.y, PS_SIZE, true, STACKS_PS_TYPES))
+      .filter(d => psFits(d.x, d.y, true))
       .slice(0, cfg.psMulti)
       .map(d => ({ x: d.x, y: d.y }));
     return;
@@ -903,18 +1008,21 @@ function ensurePlayerSpawner() {
 // drop the 1x1 spawners if the new mode disallows them (or they fell out of area).
 function resyncSpawnersForMode() {
   const cfg = MODES[state.gameMode];
-  if (cfg.psMulti) {                            // independent spawners: keep those that still fit, top up to defaults
-    playerSpawners = playerSpawners.filter(ps => objectFits(ps.x, ps.y, PS_SIZE, true, STACKS_PS_TYPES)).slice(0, cfg.psMulti);
+  if (cfg.noSpawners) {                          // Chicken Club: no spawners of either kind (structures still rebuilt below)
+    playerSpawners = [];
+    spawners = [];
+  } else if (cfg.psMulti) {                     // independent spawners: keep those that still fit, top up to defaults
+    playerSpawners = playerSpawners.filter(ps => psFits(ps.x, ps.y, true)).slice(0, cfg.psMulti);
     ensurePlayerSpawner();
   } else {
     let canon = playerSpawners.filter(ps => inCanonical(ps.x, ps.y));
     playerSpawners = [];
     if (canon.length) playerSpawners = psOrbit(canon[0].x, canon[0].y).map(p => ({ x: p.x, y: p.y }));
-    playerSpawners = playerSpawners.filter(ps => objectFits(ps.x, ps.y, PS_SIZE, true, STACKS_PS_TYPES));
+    playerSpawners = playerSpawners.filter(ps => psFits(ps.x, ps.y, true));
     // if mirroring partially fits, just rebuild from the first survivor
     if (playerSpawners.length) {
       const first = playerSpawners[0];
-      playerSpawners = psOrbit(first.x, first.y).map(p => ({ x: p.x, y: p.y })).filter(ps => objectFits(ps.x, ps.y, PS_SIZE, true, STACKS_PS_TYPES));
+      playerSpawners = psOrbit(first.x, first.y).map(p => ({ x: p.x, y: p.y })).filter(ps => psFits(ps.x, ps.y, true));
     }
     // A carried spawner sitting on the forced-mirror axis collapses to one copy and
     // won't form two teams — fall back to the mode's (off-axis) default in that case.
@@ -924,10 +1032,12 @@ function resyncSpawnersForMode() {
     }
     ensurePlayerSpawner();
   }
-  spawners = cfg.allowSpawner
-    ? spawners.filter(s => objectFits(s.x, s.y, SP_SIZE, true, STACKS_SPAWNER_TYPES, true))  // ignoreSpawner=true: don't let a spawner collide with itself
-    : [];
-  ensureSpawnerDefaults();                       // re-seed forced spawners (Tug of War)
+  if (!cfg.noSpawners) {
+    spawners = cfg.allowSpawner
+      ? spawners.filter(s => objectFits(s.x, s.y, SP_SIZE, true, STACKS_SPAWNER_TYPES, true))  // ignoreSpawner=true: don't let a spawner collide with itself
+      : [];
+    ensureSpawnerDefaults();                     // re-seed forced spawners (Tug of War)
+  }
   // Rebuild structures for the new mode: drop types it doesn't allow, then regenerate
   // each from its canonical source under its mirror rule (Castle = forced single ->
   // one per team / one in Horde; others = effective).
@@ -950,9 +1060,31 @@ function resyncSpawnersForMode() {
   mapCacheDirty = true;
 }
 
+/* ---- Rogue Crawl rooms (10x10 typed grid) ------------------------------- */
+// Set the room under a world cell to a type (single types clear any prior copy).
+function placeRogueRoom(cellX, cellY, type) {
+  const r = roomAtWorld(cellX, cellY); if (!r) return false;
+  const def = ROGUE_TYPES[type]; if (!def) return false;
+  const idx = rogueIdx(r.rx, r.ry);
+  if (rogueRooms[idx] === def.id) return false;        // no change
+  if (def.single) for (let i = 0; i < rogueRooms.length; i++) if (rogueRooms[i] === def.id) rogueRooms[i] = 0;  // only one spawn / boss
+  rogueRooms[idx] = def.id;
+  state.structuralChange = true; mapCacheDirty = true;
+  return true;
+}
+function eraseRogueRoom(cellX, cellY) {
+  const r = roomAtWorld(cellX, cellY); if (!r) return false;
+  const idx = rogueIdx(r.rx, r.ry);
+  if (rogueRooms[idx] === 0) return false;
+  rogueRooms[idx] = 0;
+  state.structuralChange = true; mapCacheDirty = true;
+  return true;
+}
+
 // Place the current tile type at a cell (and its mirror orbit). All-or-nothing
 // per cell so the map stays symmetric. Returns true if anything changed.
 function placeAtCell(cellX, cellY, type) {
+  if (MODES[state.gameMode].rogue) return placeRogueRoom(cellX, cellY, type);   // Rogue Crawl: typed rooms, not walls
   if (type === 'PlayerSpawner') return placePlayerSpawner(cellX, cellY);
   if (type === 'Spawner') return placeSpawner(cellX, cellY);
   if (isStructureType(type)) return placeStructure(type, cellX, cellY);
@@ -975,6 +1107,7 @@ function placeAtCell(cellX, cellY, type) {
 // Erase whatever is under a cell: a 1x1 spawner, the player spawner (all mirrors),
 // or the wall (and its mirror orbit).
 function eraseAtCell(cellX, cellY) {
+  if (MODES[state.gameMode].rogue) return eraseRogueRoom(cellX, cellY);   // Rogue Crawl: clear the room
   let changed = false;
   const sp = spawners.find(s => s.x === cellX && s.y === cellY);
   if (sp) {                                     // remove the spawner + its mirror orbit
@@ -1062,7 +1195,7 @@ function remirrorObjects(srcLowX, srcLowY) {
     }
     return out;
   };
-  spawners = rebuild(spawners, () => SP_SIZE, (o, p) => ({ x: p.x, y: p.y })).slice(0, SPAWNER_CAP);
+  spawners = rebuild(spawners, () => SP_SIZE, (o, p) => ({ x: p.x, y: p.y })).slice(0, spawnerCap());
   const noMirror = s => { const d = STRUCT_DEFS[s.type]; return d.forcedMirrorOnly || d.noMirror; };  // Castle + Cutemental: untouched by a manual mirror
   const untouched = structures.filter(noMirror);
   const effective = rebuild(structures.filter(s => !noMirror(s)), o => STRUCT_DEFS[o.type].size, (o, p) => ({ type: o.type, x: p.x, y: p.y }));
@@ -1137,11 +1270,23 @@ function markInto(buf, x, y) {
   buf[(y + 1) * GRID + (x + 1)] = 1;
 }
 
-function carveRect(x0, y0, x1, y1) {        // mark a cell rectangle unbuildable
+function carveRect(x0, y0, x1, y1) {        // mark a cell rectangle unplayable
   const cx1 = Math.min(x1, GRID - 1), cy1 = Math.min(y1, GRID - 1);
   for (let cy = Math.max(0, y0); cy <= cy1; cy++)
     for (let cx = Math.max(0, x0); cx <= cx1; cx++)
       playableBuf[cy * GRID + cx] = 0;
+}
+function fillRectPlayable(x0, y0, x1, y1) { // re-mark a cell rectangle playable (a hole inside a bar)
+  const cx1 = Math.min(x1, GRID - 1), cy1 = Math.min(y1, GRID - 1);
+  for (let cy = Math.max(0, y0); cy <= cy1; cy++)
+    for (let cx = Math.max(0, x0); cx <= cx1; cx++)
+      playableBuf[cy * GRID + cx] = 1;
+}
+function clearRectBuildable(x0, y0, x1, y1) { // walkable but not buildable (interior no-build rect)
+  const cx1 = Math.min(x1, GRID - 1), cy1 = Math.min(y1, GRID - 1);
+  for (let cy = Math.max(0, y0); cy <= cy1; cy++)
+    for (let cx = Math.max(0, x0); cx <= cx1; cx++)
+      buildableBuf[cy * GRID + cx] = 0;
 }
 
 // The cells that must stay unbuildable inside each lane: the 5th square in from
@@ -1168,6 +1313,7 @@ function rebuildPlayable() {
     for (let cx = a.x0; cx <= a.x1; cx++)
       playableBuf[cy * GRID + cx] = 1;
   for (const bar of cfg.bars) carveRect(bar.x0, bar.y0, bar.x1, bar.y1);   // central dividers
+  for (const h of cfg.holes || []) fillRectPlayable(h.x0, h.y0, h.x1, h.y1);  // playable arenas re-added inside a bar (Predator)
   if (cfg.corners) {                        // corners:true -> four 32x32 unbuildable corners
     const C = CORNER;
     carveRect(0, 0, C - 1, C - 1);                       // bottom-left
@@ -1185,6 +1331,8 @@ function rebuildPlayable() {
       for (let cx = a.x0 + m; cx <= a.x1 - m; cx++)
         if (playableBuf[cy * GRID + cx]) buildableBuf[cy * GRID + cx] = 1;
   }
+  // interior no-build rectangles (Predator minigame arena): walkable, not buildable.
+  for (const n of cfg.noBuild || []) clearRectBuildable(n.x0, n.y0, n.x1, n.y1);
   // per-lane corner no-build cells (Maze Wars): walkable, but not buildable.
   for (const c of cornerNoBuildCells(cfg)) buildableBuf[c.y * GRID + c.x] = 0;
   labelChambers();
@@ -1250,7 +1398,36 @@ function phaseValid(wall) {
   return { ok: !split && !sealed, split, sealed, errorCell: splitCell !== null ? splitCell : sealedCell };
 }
 
+// Connectivity of the open cells within a single rectangle (BFS bounded to the rect).
+// Used by Chicken Club, whose playable square shrinks with the player count: the open
+// space inside each size's rectangle must be exactly one region. ok=false when the
+// rect's open cells split (>1 region) or seal (0 regions).
+function regionsInRect(wall, rect) {
+  validVisited.fill(0);
+  let regions = 0, extraSeed = null;
+  for (let cy = rect.y0; cy <= rect.y1; cy++) {
+    for (let cx = rect.x0; cx <= rect.x1; cx++) {
+      const s = cy * GRID + cx;
+      if (playableBuf[s] !== 1 || wall[s] !== 0 || validVisited[s] !== 0) continue;
+      regions++;
+      if (regions === 2) extraSeed = s;          // a cell in the second (cut-off) region
+      let head = 0, tail = 0;
+      bfsQueue[tail++] = s; validVisited[s] = 1;
+      while (head < tail) {
+        const idx = bfsQueue[head++];
+        const x = idx % GRID, y = (idx - x) / GRID;
+        if (x > rect.x0) { const nb = idx - 1;    if (validVisited[nb] === 0 && playableBuf[nb] === 1 && wall[nb] === 0) { validVisited[nb] = 1; bfsQueue[tail++] = nb; } }
+        if (x < rect.x1) { const nb = idx + 1;    if (validVisited[nb] === 0 && playableBuf[nb] === 1 && wall[nb] === 0) { validVisited[nb] = 1; bfsQueue[tail++] = nb; } }
+        if (y > rect.y0) { const nb = idx - GRID; if (validVisited[nb] === 0 && playableBuf[nb] === 1 && wall[nb] === 0) { validVisited[nb] = 1; bfsQueue[tail++] = nb; } }
+        if (y < rect.y1) { const nb = idx + GRID; if (validVisited[nb] === 0 && playableBuf[nb] === 1 && wall[nb] === 0) { validVisited[nb] = 1; bfsQueue[tail++] = nb; } }
+      }
+    }
+  }
+  return { ok: regions === 1, regions, errorCell: regions > 1 ? extraSeed : (regions === 0 ? rect.y0 * GRID + rect.x0 : null) };
+}
+
 function recomputeValidity() {
+  if (state.gameMode === 'roguecrawl') { recomputeRogueValidity(); return; }
   redOccBuf.fill(0);
   blueOccBuf.fill(0);
   for (const t of placedTiles) {
@@ -1258,6 +1435,7 @@ function recomputeValidity() {
     if (always || t.type === 'RedFlowers')  markInto(redOccBuf, t.x, t.y);
     if (always || t.type === 'BlueFlowers') markInto(blueOccBuf, t.x, t.y);
   }
+  if (state.gameMode === 'chickenclub') { recomputeChickenValidity(); return; }
   const r = phaseValid(redOccBuf);
   const b = phaseValid(blueOccBuf);
   const ok = r.ok && b.ok;
@@ -1271,6 +1449,57 @@ function recomputeValidity() {
   else                     msg = `Invalid — blue-phase ${why(b)}`;
   if (!ok && state.errorCell != null) msg += ' · click to zoom';
   setValidity(ok, msg);
+}
+// Chicken Club is valid only when the open maze is one connected region at EVERY
+// player count (the arena shrinks as players die, so each size is checked on its own
+// rectangle, both flower phases). Reports the smallest failing size.
+function recomputeChickenValidity() {
+  let bad = null;
+  for (let n = CHICKEN_MIN; n <= CHICKEN_MAX && !bad; n++) {
+    const a = chickenArea(n);
+    const r = regionsInRect(redOccBuf, a);
+    if (!r.ok) { bad = { n, phase: 'red', why: r.regions === 0 ? 'sealed' : 'split', cell: r.errorCell }; break; }
+    const b = regionsInRect(blueOccBuf, a);
+    if (!b.ok) { bad = { n, phase: 'blue', why: b.regions === 0 ? 'sealed' : 'split', cell: b.errorCell }; break; }
+  }
+  if (!bad) {
+    state.errorCell = null;
+    setValidity(true, `Valid — paths connected at every size (${CHICKEN_MIN}-${CHICKEN_MAX} players)`);
+  } else {
+    state.errorCell = bad.cell;
+    let msg = `Invalid — ${bad.n}-player area: ${bad.phase}-phase path ${bad.why}`;
+    if (bad.cell != null) msg += ' · click to zoom';
+    setValidity(false, msg);
+  }
+}
+// Rogue Crawl is valid when there is exactly one spawn, exactly one boss, and every
+// placed room is connected to the rest (4-adjacency on the 10x10 grid).
+function recomputeRogueValidity() {
+  state.errorCell = null;
+  let count = 0, spawn = 0, boss = 0, start = -1;
+  for (let i = 0; i < rogueRooms.length; i++) {
+    const v = rogueRooms[i];
+    if (!v) continue;
+    count++; if (start < 0) start = i;
+    if (v === 1) spawn++; else if (v === 4) boss++;
+  }
+  if (count === 0)  return setValidity(false, 'Invalid — no rooms placed');
+  if (spawn !== 1)  return setValidity(false, spawn === 0 ? 'Invalid — needs one Spawn room' : 'Invalid — only one Spawn room allowed');
+  if (boss !== 1)   return setValidity(false, boss === 0 ? 'Invalid — needs one Boss room' : 'Invalid — only one Boss room allowed');
+  // flood-fill from the first room over 4-adjacent placed rooms
+  const seen = new Uint8Array(rogueRooms.length);
+  const stack = [start]; seen[start] = 1; let reached = 1;
+  while (stack.length) {
+    const idx = stack.pop(), rx = idx % ROGUE_N, ry = (idx - (idx % ROGUE_N)) / ROGUE_N;
+    const nbrs = [[rx - 1, ry], [rx + 1, ry], [rx, ry - 1], [rx, ry + 1]];
+    for (const [nx, ny] of nbrs) {
+      if (nx < 0 || nx >= ROGUE_N || ny < 0 || ny >= ROGUE_N) continue;
+      const ni = rogueIdx(nx, ny);
+      if (rogueRooms[ni] && !seen[ni]) { seen[ni] = 1; reached++; stack.push(ni); }
+    }
+  }
+  if (reached !== count) return setValidity(false, `Invalid — rooms not all connected (${reached}/${count} reachable)`);
+  setValidity(true, `Valid — ${count} rooms connected (1 spawn, 1 boss)`);
 }
 function setValidity(ok, msg) {
   state.valid = ok;
@@ -1439,9 +1668,31 @@ function updateRoomStats(areas) {
  * 5. SAVE / LOAD — SC2Bank XML
  * ======================================================================== */
 
+// Build the .SC2Bank for Rogue Crawl: one section per room type, each holding the
+// room ids (x,y, 0..9) of that type. Round-trips via parseBank/loadBankXML.
+function buildRogueBankXML() {
+  const byType = { RogueSpawn: [], RoguePath: [], RogueSpecial: [], RogueBoss: [] };
+  for (let ry = 0; ry < ROGUE_N; ry++) for (let rx = 0; rx < ROGUE_N; rx++) {
+    const id = rogueRooms[rogueIdx(rx, ry)];
+    if (id) byType[ROGUE_BY_ID[id]].push({ x: rx, y: ry });
+  }
+  const ptSection = (name, list) => {
+    let s = `    <Section name="${name}">\n`;
+    list.forEach((p, idx) => { s += `        <Key name="${idx}">\n            <Value point="${p.x},${p.y}"/>\n        </Key>\n`; });
+    return s + `    </Section>\n`;
+  };
+  let xml = '<?xml version="1.0" encoding="utf-8"?>\n<Bank version="1">\n';
+  for (const ty of Object.keys(byType)) xml += ptSection(ty, byType[ty]);
+  xml += `    <Section name="Count">\n`;
+  for (const ty of Object.keys(byType)) xml += `        <Key name="${ty}">\n            <Value int="${byType[ty].length}"/>\n        </Key>\n`;
+  xml += `    </Section>\n`;
+  return xml + `</Bank>\n`;
+}
+
 // Build the .SC2Bank XML. Only the canonical (unique) region is written; the
 // mirror flags let load() reconstruct the reflected copies.
 function buildBankXML() {
+  if (MODES[state.gameMode].rogue) return buildRogueBankXML();
   const byType = { TallShrubs: [], Flowers: [], RedFlowers: [], BlueFlowers: [] };
   for (const t of placedTiles) if (inCanonical(t.x, t.y)) byType[t.type].push(t);
   // Player Spawner + Castle key off the forced mirror; other objects off the effective.
@@ -1460,6 +1711,23 @@ function buildBankXML() {
     list.forEach((p, idx) => { s += `        <Key name="${idx}">\n            <Value point="${p.x + o},${p.y + o}"/>\n        </Key>\n`; });
     return s + `    </Section>\n`;
   };
+  // Section of CENTRE points keyed by player id (the array index; gaps are skipped).
+  const ptSectionById = (name, byId) => {
+    let s = `    <Section name="${name}">\n`;
+    byId.forEach((p, idx) => { if (p) s += `        <Key name="${idx}">\n            <Value point="${p.x},${p.y}"/>\n        </Key>\n`; });
+    return s + `    </Section>\n`;
+  };
+  // asPlayerSpawner structures (Predator's Predatorling) SAVE as player spawners: each
+  // takes its fixed spawnId, and the normal 4x4 spawners fill the lowest free ids — so
+  // Predator writes player -> id 0, predator -> id 1. Omit their own section/count.
+  const psStructTypes = structTypes.filter(ty => STRUCT_DEFS[ty].asPlayerSpawner);
+  const plainStructTypes = structTypes.filter(ty => !STRUCT_DEFS[ty].asPlayerSpawner);
+  const centreOf = (p, size) => ({ x: p.x + ptOffset(size), y: p.y + ptOffset(size) });
+  const psById = [];
+  for (const ty of psStructTypes) for (const s of structCanon[ty]) psById[STRUCT_DEFS[ty].spawnId] = centreOf(s, STRUCT_DEFS[ty].size);
+  let psNextId = 0;
+  for (const p of psCanon) { while (psById[psNextId] !== undefined) psNextId++; psById[psNextId++] = centreOf(p, PS_SIZE); }
+  const psCount = psById.filter(Boolean).length;
 
   let xml = '<?xml version="1.0" encoding="utf-8"?>\n<Bank version="1">\n';
   for (const type of TILE_TYPES) xml += ptSection(type, byType[type], 2);   // walls are 2x2
@@ -1470,14 +1738,14 @@ function buildBankXML() {
            `            <Value int="${byType[type].length}"/>\n` +
            `        </Key>\n`;
   }
-  xml += `        <Key name="PlayerSpawner">\n            <Value int="${psCanon.length}"/>\n        </Key>\n`;
+  xml += `        <Key name="PlayerSpawner">\n            <Value int="${psCount}"/>\n        </Key>\n`;
   xml += `        <Key name="Spawner">\n            <Value int="${spCanon.length}"/>\n        </Key>\n`;
-  for (const ty of structTypes) xml += `        <Key name="${ty}">\n            <Value int="${structCanon[ty].length}"/>\n        </Key>\n`;
+  for (const ty of plainStructTypes) xml += `        <Key name="${ty}">\n            <Value int="${structCanon[ty].length}"/>\n        </Key>\n`;
   xml += `    </Section>\n`;
   // Spawners + structures — only the canonical copy (mirrors regenerate on load).
-  xml += ptSection('PlayerSpawner', psCanon, PS_SIZE);
+  xml += ptSectionById('PlayerSpawner', psById);   // 4x4 spawners (id 0..) + asPlayerSpawner structs (fixed id)
   xml += ptSection('Spawner', spCanon, SP_SIZE);
-  for (const ty of structTypes) xml += ptSection(ty, structCanon[ty], STRUCT_DEFS[ty].size);
+  for (const ty of plainStructTypes) xml += ptSection(ty, structCanon[ty], STRUCT_DEFS[ty].size);
   // Mirror state. The game stores this as "Disabled Mirror": flag 0 = NOT
   // disabled = mirror ON, flag 1 = disabled = mirror OFF. Versus is not written
   // as its own flag — it forces horizontal mirror on, so the Horizontal flag (0)
@@ -1528,7 +1796,7 @@ function downloadFile(filename, text, mime) {
 function saveMap() {
   recomputeValidity();
   if (!state.valid) {
-    toast('Cannot save: the open area is not one connected region.', 'bad');
+    toast('Cannot save — ' + (state.validMsg || 'map is invalid').replace(/^Invalid — /, '').replace(' · click to zoom', ''), 'bad');
     return;
   }
   const name = mapBaseName() + '.SC2Bank';
@@ -1546,8 +1814,21 @@ function saveMap() {
 //   gf_InitializationMapGenerateBuilding(type, x, y, mirrorH, mirrorV)
 //     type = "Castle"/"Tower"/"Spawner"/"Fountain"/"Merchant"/"Marketplace"
 //   gf_InitializationMapSpawnPoint(x, y)  -> the Team 1 player-spawn centre
+//   gf_InitializationMapSpawnPoint(x, y, id) -> a spawn point for player <id>
+//     (Predator: each Predatorling Spawn emits id 1 — a different player type)
 // Every emitted point is the object's CENTRE (anchor + size/2), like the bank save.
+// Rogue Crawl Galaxy export: gv_rogueCrawlRooms[x][y] = z for each placed room
+// (x,y = room id 0..9, bottom-left origin; z = 1 spawn / 2 path / 3 special / 4 boss).
+function buildRogueGalaxyText() {
+  let out = `void Load${modeName()}${state.slot}Map(){\n`;
+  for (let ry = 0; ry < ROGUE_N; ry++) for (let rx = 0; rx < ROGUE_N; rx++) {
+    const id = rogueRooms[rogueIdx(rx, ry)];
+    if (id) out += `\tgv_rogueCrawlRooms[${rx}][${ry}] = ${id};\n`;
+  }
+  return out + `}\n`;
+}
 function buildGalaxyText(team1Ps) {
+  if (MODES[state.gameMode].rogue) return buildRogueGalaxyText();
   const H = state.mirrorH ? 'true' : 'false';
   const V = state.mirrorV ? 'true' : 'false';
   let out = `void Load${modeName()}${state.slot}Map(){\n`;
@@ -1577,11 +1858,22 @@ function buildGalaxyText(team1Ps) {
       out += `\tgf_InitializationMapSpawnPoint${s.type}(${s.x + ptOffset(def.size)},${s.y + ptOffset(def.size)},${id});\n`;
       continue;
     }
+    if (def.asPlayerSpawner) {                    // Predator's Predatorling -> player-spawn point for player <spawnId>
+      out += `\tgf_InitializationMapSpawnPoint(${s.x + ptOffset(def.size)},${s.y + ptOffset(def.size)},${def.spawnId});\n`;
+      continue;
+    }
     const [mh, mv] = structMirror(def);
     out += bld(def.galaxy || s.type, s.x, s.y, def.size, mh, mv);
   }
-  // Team 1 spawn point — only the chosen player spawner (its centre).
-  if (team1Ps) out += `\tgf_InitializationMapSpawnPoint(${team1Ps.x + ptOffset(PS_SIZE)},${team1Ps.y + ptOffset(PS_SIZE)});\n`;
+  // Team 1 spawn point — only the chosen player spawner (its centre). playerSpawnId
+  // (Predator) forces an explicit player id; other modes use the legacy 2-arg form.
+  if (team1Ps) {
+    const pid = MODES[state.gameMode].playerSpawnId;
+    const px = team1Ps.x + ptOffset(PS_SIZE), py = team1Ps.y + ptOffset(PS_SIZE);
+    out += pid != null
+      ? `\tgf_InitializationMapSpawnPoint(${px},${py},${pid});\n`
+      : `\tgf_InitializationMapSpawnPoint(${px},${py});\n`;
+  }
   out += `}\n`;
   return out;
 }
@@ -1668,10 +1960,11 @@ function exportOverlayPng() {
 // { mh, mv, points:[{px,py,type}] } in the raw stored (game) coordinate frame.
 function parseBank(text) {
   text = String(text).replace(/^\uFEFF/, '').trim();   // drop a UTF-8 BOM / leading whitespace
-  const data = { mh: false, mv: false, points: [], ps: [], sp: [], structs: [] };
+  const data = { mh: false, mv: false, points: [], ps: [], sp: [], structs: [], rogue: [] };
   const isOn = flag => flag === '0';                   // "Disabled Mirror": 0 = mirror ON
   const bucket = name => TILE_TYPES.includes(name) ? data.points
     : name === 'PlayerSpawner' ? data.ps : name === 'Spawner' ? data.sp
+    : ROGUE_TYPES[name] ? data.rogue                   // Rogue Crawl room sections
     : STRUCT_DEFS[name] ? data.structs : null;
 
   // ---- attempt 1: DOMParser ----
@@ -1684,12 +1977,14 @@ function parseBank(text) {
           const name = sec.getAttribute('name') || '';
           const into = bucket(name);
           if (into) {
-            for (const v of sec.getElementsByTagName('Value')) {
-              const pt = v.getAttribute('point');
+            for (const key of sec.getElementsByTagName('Key')) {   // iterate Keys to capture the id (key name)
+              const id = parseInt(key.getAttribute('name'), 10);
+              const v = key.getElementsByTagName('Value')[0];
+              const pt = v && v.getAttribute('point');
               if (!pt) continue;
               const [a, b] = pt.split(',');
               const px = parseFloat(a), py = parseFloat(b);   // centre points may be fractional (.5 for odd sizes)
-              if (Number.isFinite(px) && Number.isFinite(py)) into.push({ px, py, type: name });
+              if (Number.isFinite(px) && Number.isFinite(py)) into.push({ px, py, type: name, id: Number.isFinite(id) ? id : undefined });
             }
           } else if (/mirror/i.test(name)) {
             for (const key of sec.getElementsByTagName('Key')) {
@@ -1712,8 +2007,12 @@ function parseBank(text) {
   while ((m = secRe.exec(text))) {
     const name = m[1], body = m[2], into = bucket(name);
     if (into) {
-      let pm; const ptRe = /point="\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*"/g;   // allow fractional centres
-      while ((pm = ptRe.exec(body))) into.push({ px: +pm[1], py: +pm[2], type: name });
+      let km; const keyRe = /<Key\s+name="([^"]*)"\s*>([\s\S]*?)<\/Key>/g;   // capture the id (key name) per point
+      while ((km = keyRe.exec(body))) {
+        const id = parseInt(km[1], 10);
+        const pm = /point="\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*"/.exec(km[2]);   // allow fractional centres
+        if (pm) into.push({ px: +pm[1], py: +pm[2], type: name, id: Number.isFinite(id) ? id : undefined });
+      }
     } else if (/mirror/i.test(name)) {
       let km; const keyRe = /<Key\s+name="([^"]*)"\s*>([\s\S]*?)<\/Key>/g;
       while ((km = keyRe.exec(body))) {
@@ -1736,7 +2035,7 @@ function loadBankXML(text, filename, modeHint) {
     const x = p.px - ptOffset(2), y = p.py - ptOffset(2);
     if (inBoundsAnchor(x, y)) loaded.push({ x, y, type: p.type });
   }
-  if (!loaded.length && !data.ps.length && !data.sp.length && !data.structs.length) {
+  if (!loaded.length && !data.ps.length && !data.sp.length && !data.structs.length && !data.rogue.length) {
     toast('Load failed: no map data found in the file.', 'bad'); return;
   }
   const mh = data.mh, mv = data.mv;
@@ -1756,6 +2055,15 @@ function loadBankXML(text, filename, modeHint) {
   state.mirrorH = cfg.forceH ? true : (cfg.noH ? false : mh);
   state.mirrorV = cfg.forceV ? true : (cfg.noV ? false : mv);
   rebuildPlayable();
+  // Rogue Crawl rooms (from the per-type sections); cleared for every other mode.
+  rogueRooms.fill(0);
+  if (cfg.rogue) for (const p of data.rogue) {
+    const def = ROGUE_TYPES[p.type]; if (!def) continue;
+    const rx = Math.round(p.px), ry = Math.round(p.py);
+    if (rx < 0 || rx >= ROGUE_N || ry < 0 || ry >= ROGUE_N) continue;
+    if (def.single) for (let i = 0; i < rogueRooms.length; i++) if (rogueRooms[i] === def.id) rogueRooms[i] = 0;
+    rogueRooms[rogueIdx(rx, ry)] = def.id;
+  }
   // FORCE-LOAD every stored wall plus its reflections (effective mirror). No canonical
   // filtering and no prune, so no saved wall is ever cleared.
   for (const t of loaded) {
@@ -1763,9 +2071,18 @@ function loadBankXML(text, filename, modeHint) {
       if (!tileAt.has(keyOf(p.x, p.y))) addTile(p.x, p.y, t.type);
     }
   }
+  // PlayerSpawner section entries are routed by their stored id (key): an id matching
+  // an asPlayerSpawner structure for this mode (Predator: Predatorling = id 1) rebuilds
+  // as that 8x8 structure; every other id is a normal 4x4 player spawner.
+  const idToStruct = {};
+  for (const t of Object.keys(STRUCT_DEFS)) {
+    const d = STRUCT_DEFS[t];
+    if (d.asPlayerSpawner && (!d.modes || d.modes.includes(state.gameMode))) idToStruct[d.spawnId] = t;
+  }
   // Player spawner: forced-mirror reconstruction (one per lane/team). Default if none.
   playerSpawners = [];
   for (const p of data.ps) {
+    if (idToStruct[p.id] !== undefined) continue;   // this id is a special spawner (rebuilt as a structure below)
     const x = p.px - ptOffset(PS_SIZE), y = p.py - ptOffset(PS_SIZE);
     if (x < 0 || y < 0 || x > GRID - PS_SIZE || y > GRID - PS_SIZE) continue;
     for (const q of objOrbit(x, y, PS_SIZE, forcedH(), forcedV()))
@@ -1778,20 +2095,24 @@ function loadBankXML(text, filename, modeHint) {
     const x = p.px - ptOffset(SP_SIZE), y = p.py - ptOffset(SP_SIZE);
     if (x < 0 || y < 0 || x >= GRID || y >= GRID) continue;
     for (const q of objOrbit(x, y, SP_SIZE, state.mirrorH, state.mirrorV))
-      if (spawners.length < SPAWNER_CAP && !spawners.some(s => s.x === q.x && s.y === q.y)) spawners.push({ x: q.x, y: q.y });
+      if (spawners.length < spawnerCap() && !spawners.some(s => s.x === q.x && s.y === q.y)) spawners.push({ x: q.x, y: q.y });
   }
   ensureSpawnerDefaults();
   // structures — Castle uses the forced mirror, the rest the effective (structMirror).
+  // asPlayerSpawner structs come from the PlayerSpawner section (data.ps, by id), every
+  // other type from its own section (data.structs).
   structures = [];
-  for (const p of data.structs) {
-    const def = STRUCT_DEFS[p.type]; if (!def || (def.modes && !def.modes.includes(state.gameMode))) continue;
-    if (structures.filter(s => s.type === p.type).length >= structCap(def)) continue;  // honour the per-mode cap
-    const x = p.px - ptOffset(def.size), y = p.py - ptOffset(def.size);
-    if (x < 0 || y < 0 || x > GRID - def.size || y > GRID - def.size) continue;
+  const placeStructPoint = (type, px, py) => {
+    const def = STRUCT_DEFS[type]; if (!def || (def.modes && !def.modes.includes(state.gameMode))) return;
+    if (structures.filter(s => s.type === type).length >= structCap(def)) return;  // honour the per-mode cap
+    const x = px - ptOffset(def.size), y = py - ptOffset(def.size);
+    if (x < 0 || y < 0 || x > GRID - def.size || y > GRID - def.size) return;
     const [smh, smv] = structMirror(def);
     for (const q of objOrbit(x, y, def.size, smh, smv))
-      if (!structures.some(s => s.type === p.type && s.x === q.x && s.y === q.y)) structures.push({ type: p.type, x: q.x, y: q.y });
-  }
+      if (!structures.some(s => s.type === type && s.x === q.x && s.y === q.y)) structures.push({ type, x: q.x, y: q.y });
+  };
+  for (const p of data.structs) placeStructPoint(p.type, p.px, p.py);
+  for (const p of data.ps) { const st = idToStruct[p.id]; if (st) placeStructPoint(st, p.px, p.py); }
   syncControls();
   recomputeValidity();
   fitView();
@@ -1917,6 +2238,7 @@ function snapshot() {
     ps: playerSpawners.map(s => ({ x: s.x, y: s.y })),
     sp: spawners.map(s => ({ x: s.x, y: s.y })),
     st: structures.map(s => ({ type: s.type, x: s.x, y: s.y })),
+    rogue: Array.from(rogueRooms),
     mirrorH: state.mirrorH, mirrorV: state.mirrorV, gameMode: state.gameMode,
   };
 }
@@ -1925,6 +2247,7 @@ function restoreSnapshot(s) {
   playerSpawners = (s.ps || []).map(p => ({ x: p.x, y: p.y }));
   spawners = (s.sp || []).map(p => ({ x: p.x, y: p.y }));
   structures = (s.st || []).map(p => ({ type: p.type, x: p.x, y: p.y }));
+  rogueRooms.fill(0); if (s.rogue) rogueRooms.set(s.rogue);
   state.mirrorH = s.mirrorH; state.mirrorV = s.mirrorV;
   state.gameMode = s.gameMode || 'standard';
   state.versus = state.gameMode !== 'standard';
@@ -2083,6 +2406,8 @@ function render() {
   drawUnbuildable();
   drawAxes();
   drawBorder();
+  drawChickenOverlay();
+  drawRogueOverlay();
   drawCoordLabels();
   drawGhost();
   drawSelection();
@@ -2328,9 +2653,74 @@ function drawBorder() {
   ctx.strokeRect(pr.x + 0.5, pr.y + 0.5, pr.w - 1, pr.h - 1);
 }
 
+// Chicken Club overlay: the playable-area outline for every player count (the arena
+// shrinks toward the centre as players die) plus the per-count spawn rings (radius
+// 2n+2 cells from the arena centre). One outline + one ring per count CHICKEN_MIN..MAX.
+function drawChickenOverlay() {
+  if (state.gameMode !== 'chickenclub') return;
+  const c = worldToScreen(CHICKEN_CENTER, CHICKEN_CENTER);
+  for (let n = CHICKEN_MIN; n <= CHICKEN_MAX; n++) {
+    const a = chickenArea(n);
+    const r = worldRectToScreen(a.x0, a.y0, a.x1 + 1, a.y1 + 1);
+    ctx.lineWidth = n === CHICKEN_MAX ? 2 : 1.5;
+    ctx.strokeStyle = n === CHICKEN_MAX ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.6)';
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    // spawn ring for n players
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,209,102,0.55)';   // amber
+    ctx.arc(c.x, c.y, chickenSpawnRadius(n) * state.scale, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// Rogue Crawl overlay: the 10x10 room grid — filled cells coloured by type with a
+// centred label, empty cells just outlined, plus a hover highlight. (0,0) is the
+// bottom-left room; world-y grows upward, so the grid reads bottom-up like the ids.
+function drawRogueOverlay() {
+  if (!MODES[state.gameMode].rogue) return;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let ry = 0; ry < ROGUE_N; ry++) for (let rx = 0; rx < ROGUE_N; rx++) {
+    const x0 = ROGUE_ORIGIN + rx * ROGUE_ROOM, y0 = ROGUE_ORIGIN + ry * ROGUE_ROOM;
+    const r = worldRectToScreen(x0, y0, x0 + ROGUE_ROOM, y0 + ROGUE_ROOM);
+    const id = rogueRooms[rogueIdx(rx, ry)];
+    if (id) {
+      const def = ROGUE_TYPES[ROGUE_BY_ID[id]];
+      ctx.fillStyle = def.color;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      const fs = clamp(r.w * 0.22, 8, 16);
+      if (fs >= 8) {
+        ctx.font = `600 ${fs}px ui-sans-serif, system-ui, sans-serif`;
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillText(def.label, r.x + r.w / 2, r.y + r.h / 2);
+      }
+    }
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+  }
+  if (state.hoverCell) {                          // highlight the room under the cursor
+    const rr = roomAtWorld(state.hoverCell.x, state.hoverCell.y);
+    if (rr) {
+      const x0 = ROGUE_ORIGIN + rr.rx * ROGUE_ROOM, y0 = ROGUE_ORIGIN + rr.ry * ROGUE_ROOM;
+      const r = worldRectToScreen(x0, y0, x0 + ROGUE_ROOM, y0 + ROGUE_ROOM);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    }
+  }
+}
+
 function fillWorldRect(wx0, wy0, wx1, wy1) {
   const r = worldRectToScreen(wx0, wy0, wx1, wy1);
   ctx.fillRect(r.x, r.y, r.w, r.h);
+}
+function worldRectPath(path, wx0, wy0, wx1, wy1) {   // add a world-rect subpath (screen px) for even-odd fills
+  const r = worldRectToScreen(wx0, wy0, wx1, wy1);
+  path.rect(r.x, r.y, r.w, r.h);
+}
+// Holes fully contained in a bar (rectangles to leave UNpainted when filling it).
+function holesInBar(cfg, bar) {
+  return (cfg.holes || []).filter(h => h.x0 >= bar.x0 && h.y0 >= bar.y0 && h.x1 <= bar.x1 && h.y1 <= bar.y1);
 }
 // Restricted modes (dim=true): shade the out-of-play margins and paint dividers.
 // Standard is dimmed too — its 2-cell unbuildable border greys out (corners build).
@@ -2345,7 +2735,19 @@ function drawUnbuildable() {
   fillWorldRect(0, py0, px0, py1);         // left margin
   fillWorldRect(px1, py0, GRID, py1);      // right margin
   ctx.fillStyle = '#000';
-  for (const k of cfg.bars) fillWorldRect(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID));
+  for (const k of cfg.bars) {                   // bars are black; any playable hole inside is punched out
+    const ky1 = Math.min(k.y1 + 1, GRID), holes = holesInBar(cfg, k);
+    if (!holes.length) { fillWorldRect(k.x0, k.y0, k.x1 + 1, ky1); continue; }
+    const path = new Path2D();
+    worldRectPath(path, k.x0, k.y0, k.x1 + 1, ky1);
+    for (const h of holes) worldRectPath(path, h.x0, h.y0, h.x1 + 1, h.y1 + 1);
+    ctx.fill(path, 'evenodd');                  // the hole keeps the playable background beneath it
+  }
+  // interior no-build rectangles (Predator minigame arena): walkable, tinted not-buildable
+  for (const n of cfg.noBuild || []) {
+    ctx.fillStyle = 'rgba(224,49,49,0.22)';
+    fillWorldRect(n.x0, n.y0, n.x1 + 1, n.y1 + 1);
+  }
   // no-build ring inside the playable area (walkable, but marked as not buildable)
   const m = cfg.buildMargin || 0;
   if (m) {
@@ -2369,6 +2771,7 @@ function mcFill(cx0, cy0, cx1, cy1, color) {   // fill a cell-rect on the cache 
   mapCacheCtx.fillStyle = color;
   mapCacheCtx.fillRect(cx0, GRID - cy1, cx1 - cx0, cy1 - cy0);
 }
+function mcRectPath(path, cx0, cy0, cx1, cy1) { path.rect(cx0, GRID - cy1, cx1 - cx0, cy1 - cy0); }  // cache-space subpath
 function renderMapCache() {
   mapCacheCtx.clearRect(0, 0, GRID, GRID);
   mcFill(0, 0, HALF, HALF, '#1763b8');       // bottom-left blue
@@ -2385,7 +2788,16 @@ function renderMapCache() {
     mcFill(0, a.y1 + 1, GRID, GRID, dim);
     mcFill(0, a.y0, a.x0, a.y1 + 1, dim);
     mcFill(a.x1 + 1, a.y0, GRID, a.y1 + 1, dim);
-    for (const k of cfg.bars) mcFill(k.x0, k.y0, k.x1 + 1, Math.min(k.y1 + 1, GRID), '#000');
+    for (const k of cfg.bars) {                 // punch any playable hole out of the bar's black fill
+      const ky1 = Math.min(k.y1 + 1, GRID), holes = holesInBar(cfg, k);
+      if (!holes.length) { mcFill(k.x0, k.y0, k.x1 + 1, ky1, '#000'); continue; }
+      const path = new Path2D();
+      mcRectPath(path, k.x0, k.y0, k.x1 + 1, ky1);
+      for (const h of holes) mcRectPath(path, h.x0, h.y0, h.x1 + 1, h.y1 + 1);
+      mapCacheCtx.fillStyle = '#000';
+      mapCacheCtx.fill(path, 'evenodd');
+    }
+    for (const n of cfg.noBuild || []) mcFill(n.x0, n.y0, n.x1 + 1, n.y1 + 1, 'rgba(224,49,49,0.30)');
     const m = cfg.buildMargin || 0;
     if (m) {
       const a = cfg.area, nb = 'rgba(224,49,49,0.30)';
@@ -2400,6 +2812,11 @@ function renderMapCache() {
   for (const st of structures) { const d = STRUCT_DEFS[st.type]; mcFill(st.x, st.y, st.x + d.size, st.y + d.size, d.color); }
   for (const ps of playerSpawners) mcFill(ps.x, ps.y, ps.x + PS_SIZE, ps.y + PS_SIZE, PS_COLOR);
   for (const sp of spawners) mcFill(sp.x, sp.y, sp.x + SP_SIZE, sp.y + SP_SIZE, SP_COLOR);
+  if (cfg.rogue) for (let ry = 0; ry < ROGUE_N; ry++) for (let rx = 0; rx < ROGUE_N; rx++) {   // Rogue Crawl rooms
+    const id = rogueRooms[rogueIdx(rx, ry)]; if (!id) continue;
+    const x0 = ROGUE_ORIGIN + rx * ROGUE_ROOM, y0 = ROGUE_ORIGIN + ry * ROGUE_ROOM;
+    mcFill(x0, y0, x0 + ROGUE_ROOM, y0 + ROGUE_ROOM, ROGUE_TYPES[ROGUE_BY_ID[id]].color);
+  }
 }
 function drawMinimap() {
   const px = GRID * MM_CELL;                  // backing-store size (device px), a multiple of GRID
@@ -2448,6 +2865,7 @@ function eraseOutline(x, y) {
 
 function drawGhost() {
   if (!state.hoverCell || state.tool === 'pan' || state.mode === 'pan') return;
+  if (MODES[state.gameMode].rogue) return;            // Rogue Crawl draws its own room hover highlight
   if (state.ctrlDown && clipboard && clipboard.tiles.length) return;  // paste preview takes over
   if (state.tool === 'select') return;          // the marquee is drawn by drawSelection()
 
@@ -2484,17 +2902,17 @@ function drawSpawnerGhost() {
     const ax = clamp(c.x - (PS_SIZE >> 1), 0, GRID - PS_SIZE), ay = clamp(c.y - (PS_SIZE >> 1), 0, GRID - PS_SIZE);
     const cap = MODES[state.gameMode].psMulti;
     if (cap) {
-      const ok = playerSpawners.length < cap && objectFits(ax, ay, PS_SIZE, false, STACKS_PS_TYPES);
+      const ok = playerSpawners.length < cap && psFits(ax, ay, false);
       objGhost(ax, ay, PS_SIZE, ok, PS_COLOR);
     } else {
       const pts = psOrbit(ax, ay);
-      const ok = pts.every(p => objectFits(p.x, p.y, PS_SIZE, true, STACKS_PS_TYPES));
+      const ok = pts.every(p => psFits(p.x, p.y, true));
       for (const p of pts) objGhost(p.x, p.y, PS_SIZE, ok, PS_COLOR);
     }
   } else {
     const x = clamp(c.x, 0, GRID - 1), y = clamp(c.y, 0, GRID - 1);
     const pts = spOrbit(x, y);
-    const ok = MODES[state.gameMode].allowSpawner && spawners.length + pts.length <= SPAWNER_CAP && pts.every(p => objectFits(p.x, p.y, SP_SIZE, false, STACKS_SPAWNER_TYPES));
+    const ok = MODES[state.gameMode].allowSpawner && spawners.length + pts.length <= spawnerCap() && pts.every(p => objectFits(p.x, p.y, SP_SIZE, false, STACKS_SPAWNER_TYPES));
     for (const p of pts) objGhost(p.x, p.y, SP_SIZE, ok, SP_COLOR);
   }
 }
@@ -2621,7 +3039,7 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
-  if (state.mode === 'room' && state.selStart && state.hoverCell) {
+  if (state.mode === 'room' && state.selStart && state.hoverCell && !MODES[state.gameMode].rogue) {
     fillHollowRect(state.selStart, state.hoverCell, state.type);
   }
   if (state.mode === 'select' && state.selStart && state.hoverCell) {
@@ -2707,8 +3125,12 @@ function onKeyUp(e) {
 // A type can be selected if it's enabled in the current mode: the 1x1 Spawner needs
 // allowSpawner; structures need the mode to be in their `modes` list.
 function typeSelectable(type) {
+  const cfg = MODES[state.gameMode];
+  if (cfg.rogue) return !!ROGUE_TYPES[type];                  // Rogue Crawl: only the 4 room types
+  if (ROGUE_TYPES[type]) return false;                       // room types exist only in Rogue Crawl
   if (isStructureType(type)) { const d = STRUCT_DEFS[type]; return !d.modes || d.modes.includes(state.gameMode); }
-  return type !== 'Spawner' || MODES[state.gameMode].allowSpawner;
+  if (isSpawnerType(type) && cfg.noSpawners) return false;   // Chicken Club: no spawners at all
+  return type !== 'Spawner' || cfg.allowSpawner;
 }
 function buildPalette() {
   const el = document.getElementById('palette');
@@ -2719,7 +3141,7 @@ function buildPalette() {
     div.className = 'swatch' + (item.type === state.type ? ' active' : '') + (disabled ? ' disabled' : '');
     div.dataset.type = item.type;
     const hotkey = i + 1;                       // palette hotkeys are 1..N (visible items)
-    const label = item.type === 'Spawner' ? `Spawner <b id="spawnerCount">0/${SPAWNER_CAP}</b>` : item.label;
+    const label = item.type === 'Spawner' ? `Spawner <b id="spawnerCount">0/${spawnerCap()}</b>` : item.label;
     div.innerHTML = `<span class="dot" style="background:${item.color}">${hotkey}</span><span>${label}</span>`;
     if (!disabled) div.addEventListener('click', () => setType(item.type));
     el.appendChild(div);
@@ -2728,7 +3150,7 @@ function buildPalette() {
 }
 function updateSpawnerCount() {
   const el = document.getElementById('spawnerCount');
-  if (el) el.textContent = `${spawners.length}/${SPAWNER_CAP}`;
+  if (el) el.textContent = `${spawners.length}/${spawnerCap()}`;
 }
 function setType(type) {
   if (!typeSelectable(type)) return;
@@ -2791,7 +3213,7 @@ function setMode(name) {
   if (state.mirrorH || state.mirrorV) resymmetrizeAll();
   resyncSpawnersForMode();
   clearSelection();           // selection coords may no longer apply to the new mode
-  if (!typeSelectable(state.type)) state.type = 'TallShrubs';  // selected palette item got disabled
+  if (!typeSelectable(state.type)) state.type = cfg.rogue ? 'RoguePath' : 'TallShrubs';  // selected palette item got disabled
   syncControls();
   recomputeValidity();
   updateMeta();
@@ -2820,7 +3242,11 @@ function updateMeta() {
   else if (state.gameMode === 'horde') region = 'horde zone';
   else if (state.gameMode === 'maze') region = 'maze · 4 lanes';
   else if (state.gameMode === 'td') region = 'tower defense · centre pad';
+  else if (state.gameMode === 'towermaze') region = 'tower maze · build arena';
   else if (state.gameMode === 'tow') region = 'tug of war · left team';
+  else if (state.gameMode === 'predator') region = 'predator · outer ring';
+  else if (state.gameMode === 'chickenclub') region = 'chicken club · 10-player max';
+  else if (state.gameMode === 'roguecrawl') region = 'rogue crawl · 10x10 rooms';
   else if (state.mirrorH && state.mirrorV) region = 'bottom-left quadrant';
   else if (state.mirrorH) region = 'bottom half';   // Horizontal reflects y (top/bottom)
   else if (state.mirrorV) region = 'left half';     // Vertical reflects x (left/right)
@@ -2845,7 +3271,7 @@ function toast(msg, kind) {
 }
 
 function clearMap() {
-  if (!placedTiles.length && !spawners.length && !structures.length) { toast('Map is already empty', 'ok'); return; }
+  if (!placedTiles.length && !spawners.length && !structures.length && !rogueRooms.some(v => v)) { toast('Map is already empty', 'ok'); return; }
   commitHistory(snapshot());
   placedTiles = [];
   tileAt.clear();
@@ -2853,6 +3279,7 @@ function clearMap() {
   spawners = [];
   playerSpawners = [];
   structures = [];
+  rogueRooms.fill(0);
   ensurePlayerSpawner();      // keep the default player spawner in the middle
   ensureSpawnerDefaults();    // re-seed forced spawners (Tug of War)
   clearSelection();
