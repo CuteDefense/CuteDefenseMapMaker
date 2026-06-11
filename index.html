@@ -443,20 +443,21 @@ const TOW_SPAWNER_DEFAULTS = [{ x: 6, y: 104 }, { x: 6, y: 151 }];
 const PRED_BLACK = { x0: 76,  y0: 88,  x1: 179, y1: 167 };  // central unplayable block
 const PRED_ARENA = { x0: 116, y0: 122, x1: 139, y1: 133 };  // playable minigame arena (no-build)
 // Chicken Club: a battle-royale arena that GROWS with the player count. The base
-// square 124,124..132,132 expands 2 cells per player in every direction, so an
-// n-player game (2..10) spans 124-2n..132+2n; the editor builds in the 10-player
-// maximum (104,104..152,152). Players spawn on a ring 2n+2 cells from the arena
-// centre. Pathing is validated at EVERY size because the arena shrinks as players
-// die — the maze must stay one connected region at each player count.
+// square 123,123..131,131 expands 2 cells per player in every direction, so an
+// n-player game (2..10) spans 123-2n..131+2n; the editor builds in the 10-player
+// maximum (103,103..151,151). Players spawn on a ring 2n+2 cells from the arena
+// centre (the true map centre, world 127.5). Pathing is validated at EVERY size
+// because the arena shrinks as players die — the maze must stay one connected
+// region at each player count.
 const CHICKEN_MIN = 2, CHICKEN_MAX = 10;
-const CHICKEN_BASE = { x0: 124, y0: 124, x1: 132, y1: 132 };
-const CHICKEN_CENTER = (CHICKEN_BASE.x0 + CHICKEN_BASE.x1 + 1) / 2;   // world centre = 128.5
+const CHICKEN_BASE = { x0: 123, y0: 123, x1: 131, y1: 131 };
+const CHICKEN_CENTER = (CHICKEN_BASE.x0 + CHICKEN_BASE.x1 + 1) / 2;   // world centre = 127.5 (map centre)
 function chickenArea(n) {                       // playable square for n players
   const e = 2 * n;
   return { x0: CHICKEN_BASE.x0 - e, y0: CHICKEN_BASE.y0 - e, x1: CHICKEN_BASE.x1 + e, y1: CHICKEN_BASE.y1 + e };
 }
 function chickenSpawnRadius(n) { return 2 * n + 2; }   // spawn-ring radius (cells) for n players
-const CHICKEN_AREA = chickenArea(CHICKEN_MAX);  // 104,104..152,152 — the buildable maximum
+const CHICKEN_AREA = chickenArea(CHICKEN_MAX);  // 103,103..151,151 — the buildable maximum
 // Rogue Crawl: a SPECIAL builder — a 10x10 grid of typed ROOMS (not walls). Each cell is
 // empty or one of 4 types (1=spawn, 2=path, 3=special, 4=boss); only one spawn and one
 // boss may exist, and every placed room must be connected (4-adjacency). Room id (0,0) is
@@ -506,7 +507,7 @@ const MODES = {
   tow:      { label: 'Tug of War',  forceH: false, forceV: true, allowSpawner: true, psDefault: { x: 56, y: 126 }, spawnerDefaults: TOW_SPAWNER_DEFAULTS, area: TOW_AREA, bars: [], corners: false, dim: true, buildMargin: 0 },  // vertical mirror forced = left/right teams (one player spawner + one Castle per team); horizontal mirror toggleable; spawners forced at 6,104 & 6,151; Castle/Fountain/Tower buildings
   towermaze:{ label: 'Tower Maze',  forceH: false, forceV: false, allowSpawner: false, psOnUnbuildable: true, psDefault: { x: 126, y: 126 }, area: TM_AREA, bars: [], noBuild: TM_BLOCKS, corners: false, dim: true, buildMargin: 0 },  // 48x48 build arena; nine forced-unbuildable 2x2 squares (centre + corners + edge mids; non-centre inset 4); central player spawn (may sit on the unbuildable squares), no 1x1 spawners
   predator: { label: 'Predator',    forceH: false, forceV: false, allowSpawner: true, spawnerCap: 4, playerSpawnId: 0, psDefault: { x: 126, y: 44 }, area: NORMAL_AREA, bars: [PRED_BLACK], holes: [PRED_ARENA], noBuild: [PRED_ARENA], corners: false, dim: true, buildMargin: 0 },  // Standard playable area with a central unplayable block; a playable minigame arena (no-build) at its centre. One player spawner (id 0) + one Predatorling "predator spawner" (8x8, id 1) both save into the PlayerSpawner section; up to 4 regular 1x1 spawners
-  chickenclub:{ label: 'Chicken Club', forceH: false, forceV: false, allowSpawner: false, noSpawners: true, psDefault: { x: 126, y: 126 }, area: CHICKEN_AREA, bars: [], corners: false, dim: true, buildMargin: 0 },  // dynamic arena (2-10 players): base 124-132 grows 2 cells/player/direction; edited at the 10-player max (104-152). Per-size outlines + spawn rings; pathing validated at every size (it shrinks as players die). No spawners
+  chickenclub:{ label: 'Chicken Club', forceH: false, forceV: false, allowSpawner: false, noSpawners: true, psDefault: { x: 126, y: 126 }, area: CHICKEN_AREA, bars: [], corners: false, dim: true, buildMargin: 0 },  // dynamic arena (2-10 players): base 123-131 grows 2 cells/player/direction; edited at the 10-player max (103-151). Per-size outlines + spawn rings; pathing validated at every size (it shrinks as players die). No spawners
   roguecrawl:{ label: 'Rogue Crawl', forceH: false, forceV: false, allowSpawner: false, noSpawners: true, rogue: true, psDefault: { x: 126, y: 126 }, area: ROGUE_AREA, bars: [], corners: false, dim: true, buildMargin: 0 },  // SPECIAL builder: a 10x10 typed-room grid (spawn/path/special/boss). No walls/spawners; one spawn + one boss, all rooms connected; exports gv_rogueCrawlRooms[x][y]=z
 };
 
