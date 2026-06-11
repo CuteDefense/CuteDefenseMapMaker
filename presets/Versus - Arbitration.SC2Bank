@@ -1791,7 +1791,7 @@
     </Section>
     <Section name="PlayerSpawner">
         <Key name="0">
-            <Value point="58,128"/>
+            <Value point="57,128"/>
         </Key>
     </Section>
     <Section name="Spawner">
