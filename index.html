@@ -1542,12 +1542,12 @@ const roomZone = new Uint8Array(GRID * GRID);
 const roomCoreBuf = new Uint8Array(GRID * GRID);
 const roomCoreId = new Int32Array(GRID * GRID);
 const roomCellCore = new Int32Array(GRID * GRID);
-const roomFlowerOwner = new Int32Array(GRID * GRID); // per-cell index into placedTiles of the red/blue flower covering it (-1 = none)
 const ROOM_MIN_AREA = 50;
 // Per-room analysis for the shift overlay + opening averages: one entry per detected
 // room { cx, cy (centroid, world cells), size (area cells), n2 (2x2 openings), n4 (2x4) }.
-// n2/n4 can be fractional: each boundary red/blue flower is a doorway that's open in its
-// OFF phase (only one colour is a wall at a time, 50/50) so it adds 0.5 of a 2x2 opening.
+// n2/n4 can be fractional: counts are AVERAGED over the two flower phases, so a genuine
+// no-tile gap (a doorway every phase) weighs 1 and a flower wall (a doorway only its OFF
+// phase, since one colour is a wall at a time, 50/50) weighs 0.5.
 let roomData = [];
 
 // Group exit cells (room cells bordering open non-room space) into 4-connected runs;
@@ -1650,18 +1650,6 @@ function recomputeRooms() {
   const total = GRID * GRID;
   const isOpen = i => playableBuf[i] === 1 && occ[i] === 0;
 
-  // Map each cell to the red/blue flower tile (2x2) covering it. Flowers are PHASE walls
-  // — a red flower blocks only in the red phase, a blue only in the blue phase, and the
-  // game shows exactly one colour at a time (50/50). So a boundary flower is a doorway
-  // that's open half the time; we credit each as 0.5 of an opening below.
-  roomFlowerOwner.fill(-1);
-  for (let k = 0; k < placedTiles.length; k++) {
-    const t = placedTiles[k];
-    if (t.type !== 'RedFlowers' && t.type !== 'BlueFlowers') continue;
-    const b = t.y * GRID + t.x;
-    roomFlowerOwner[b] = k; roomFlowerOwner[b + 1] = k;
-    roomFlowerOwner[b + GRID] = k; roomFlowerOwner[b + GRID + 1] = k;
-  }
   // Refresh the per-phase wall bitmaps (always-walls + that phase's flowers) so the
   // base-strength model sees current geometry regardless of recomputeValidity order.
   redOccBuf.fill(0); blueOccBuf.fill(0);
@@ -1730,7 +1718,6 @@ function recomputeRooms() {
     let sumX = 0, sumY = 0, cnt = 0;
     const exits = [];
     const roomCells = [];           // this room's cells (fed to the base-strength model)
-    const adjFlowers = new Set();   // flower tiles (indices) bordering this room
     for (let i = 0; i < total; i++) if (roomCellCore[i] === c) {
       roomZone[i] = 1;
       roomCells.push(i);
@@ -1740,37 +1727,16 @@ function recomputeRooms() {
           (x < GRID - 1 && isOpen(i + 1)    && roomCellCore[i + 1]    !== c) ||
           (y > 0        && isOpen(i - GRID) && roomCellCore[i - GRID] !== c) ||
           (y < GRID - 1 && isOpen(i + GRID) && roomCellCore[i + GRID] !== c)) exits.push(i);
-      if (x > 0        && roomFlowerOwner[i - 1]    >= 0) adjFlowers.add(roomFlowerOwner[i - 1]);
-      if (x < GRID - 1 && roomFlowerOwner[i + 1]    >= 0) adjFlowers.add(roomFlowerOwner[i + 1]);
-      if (y > 0        && roomFlowerOwner[i - GRID] >= 0) adjFlowers.add(roomFlowerOwner[i - GRID]);
-      if (y < GRID - 1 && roomFlowerOwner[i + GRID] >= 0) adjFlowers.add(roomFlowerOwner[i + GRID]);
     }
+    // Fallback opening counts: genuine (no-tile) gaps only, present every phase. The
+    // flower-aware counts (a flower is a doorway only its OFF phase) are derived from the
+    // base-strength per-phase model below and override these whenever it's available.
     let n2 = 0, n4 = 0;
-    for (const w of groupExitRuns(exits)) { if (w <= 2) n2++; else n4++; }   // genuine (no-tile) gaps, present every phase
-    // Each bordering flower is a wall only in its own phase, so it's a doorway open the
-    // OTHER 50% of the time -> +0.5 of a 2x2 opening (flowers are 2x2). The per-flower
-    // average is 0.5 regardless of colour (red opens exactly when blue is the active wall
-    // and vice versa). 1 red + 1 blue -> 1.0; two reds -> 1.0 (both open together half the
-    // time, neither the rest). Skip flowers that don't bridge this room to open non-room
-    // space (a flower buried in a thick wall opens onto more wall, not a doorway).
-    for (const fi of adjFlowers) {
-      const ft = placedTiles[fi];
-      const fcells = [ft.y * GRID + ft.x, ft.y * GRID + ft.x + 1, (ft.y + 1) * GRID + ft.x, (ft.y + 1) * GRID + ft.x + 1];
-      let leadsOut = false;
-      for (const fc of fcells) {
-        const fx = fc % GRID, fy = (fc - (fc % GRID)) / GRID;
-        if ((fx > 0        && isOpen(fc - 1)    && roomCellCore[fc - 1]    !== c) ||
-            (fx < GRID - 1 && isOpen(fc + 1)    && roomCellCore[fc + 1]    !== c) ||
-            (fy > 0        && isOpen(fc - GRID) && roomCellCore[fc - GRID] !== c) ||
-            (fy < GRID - 1 && isOpen(fc + GRID) && roomCellCore[fc + GRID] !== c)) { leadsOut = true; break; }
-      }
-      if (leadsOut) n2 += 0.5;
-    }
+    for (const w of groupExitRuns(exits)) { if (w <= 2) n2++; else n4++; }
     // store cells + rectangle decomposition; the overlay is painted by strength below
     roomData.push({ cx: sumX / cnt, cy: sumY / cnt, size: area[c], n2, n4, cells: roomCells, rects: decomposeRoom(c) });
   }
   updateRoomStats(roomAreas);
-  updateOpeningStats(roomData);
 
   // Base defensibility — best/worst/avg strength across the two flower phases (see
   // base-strength.js). Attach a 0-100 score to each room for the overlay + panel.
@@ -1786,10 +1752,19 @@ function recomputeRooms() {
         roomData[i].strength = b.strength100;
         roomData[i].sWorst100 = 100 * b.strengthWorst / maxS;
         roomData[i].sBest100 = 100 * b.strengthBest / maxS;
+        // Opening counts AVERAGED over the two flower phases (the model detects each
+        // phase's doorways properly): a genuine no-tile gap is a doorway in BOTH phases
+        // (weight 1); a flower wall is a doorway only its OFF phase (weight 0.5). Width
+        // <=2 -> a 2x2 opening, else a 2x4. This overrides the genuine-only fallback.
+        const tally = ph => ph.openings.reduce((a, o) => { a[o.width <= 2 ? 0 : 1]++; return a; }, [0, 0]);
+        const rt = tally(b.red), bt = tally(b.blue);
+        roomData[i].n2 = (rt[0] + bt[0]) / 2;
+        roomData[i].n4 = (rt[1] + bt[1]) / 2;
       });
       updateStrengthStats(res, maxS);
     } catch (e) { console.warn('base-strength failed', e); updateStrengthStats(null, 1); }
   } else updateStrengthStats(null, 1);
+  updateOpeningStats(roomData);
   paintRoomOverlay();   // colour each base by its average strength (red worst -> purple best)
 }
 
