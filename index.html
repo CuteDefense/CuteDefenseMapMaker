@@ -62,6 +62,12 @@
   #sidebar h1 small { display:block; color: var(--muted); font-weight: 400; font-size: 11px; margin-top: 2px; }
   .group { display: flex; flex-direction: column; gap: 8px; }
   .group > .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  /* collapsible panel: <details class="group collapse"><summary class="label">…</summary>…</details> */
+  details.collapse { display: block; }
+  summary.label { cursor: pointer; list-style: none; margin-bottom: 8px; }
+  summary.label::-webkit-details-marker { display: none; }
+  summary.label::before { content: '\25B8'; display: inline-block; width: 1.1em; color: var(--muted); }
+  details[open] > summary.label::before { content: '\25BE'; }
 
   .palette { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .swatch {
@@ -241,7 +247,6 @@
         <button class="btn" id="pasteBtn" disabled>Paste</button>
         <button class="btn" id="deleteBtn" disabled>Delete</button>
       </div>
-      <div class="hint">Pick <b>Select</b> (<code>S</code>), drag a box over walls, then Copy/Cut/Delete. Paste drops the clipboard at the cursor (or view centre). Shortcuts: <code>Ctrl+C/X/V</code>, <code>Del</code>. Walls only; ignores the editor mirror.</div>
     </div>
 
     <div class="group">
@@ -326,6 +331,17 @@
       </div>
     </div>
 
+    <details class="group collapse">
+      <summary class="label">Room openings</summary>
+      <div class="meta">
+        <div>Avg 2&times;2 openings: <b id="avg2x2">&mdash;</b></div>
+        <div>Avg 2&times;4 openings: <b id="avg2x4">&mdash;</b></div>
+        <div>Avg openings (all): <b id="avgOpen">&mdash;</b></div>
+        <div>Avg size / opening width: <b id="avgRatio">&mdash;</b></div>
+        <div style="color:var(--muted)">Hold <code>Shift</code> with Room zones on to label each room.</div>
+      </div>
+    </details>
+
     <div class="group">
       <div class="meta">
         <div>Tiles placed: <b id="tileCount">0</b></div>
@@ -334,8 +350,8 @@
       </div>
     </div>
 
-    <div class="group">
-      <div class="label">Controls</div>
+    <details class="group collapse">
+      <summary class="label">Controls</summary>
       <div class="hint">
         <b>Left-drag</b> paint / erase / draw a room.<br>
         <b>Right</b> or <b>middle drag</b> (or <code>Space</code>+drag) to pan.<br>
@@ -344,7 +360,7 @@
         Keys: <code>1-4</code> tiles, <code>B/R/E/S/H</code> tools, <code>G</code> grid, <code>M</code> minimap,
         <code>Ctrl+Z</code>/<code>Ctrl+Y</code> undo/redo, <code>Ctrl+S</code> save.
       </div>
-    </div>
+    </details>
 
     <div class="group">
       <div class="support-card">
@@ -1525,6 +1541,30 @@ const roomCoreBuf = new Uint8Array(GRID * GRID);
 const roomCoreId = new Int32Array(GRID * GRID);
 const roomCellCore = new Int32Array(GRID * GRID);
 const ROOM_MIN_AREA = 50;
+// Per-room analysis for the shift overlay + opening averages: one entry per detected
+// room { cx, cy (centroid, world cells), size (area cells), n2 (2x2 openings), n4 (2x4) }.
+let roomData = [];
+
+// Group exit cells (room cells bordering open non-room space) into 4-connected runs;
+// return each run's width = the larger bbox dimension (the doorway's cross-section).
+function groupExitRuns(cells) {
+  const set = new Set(cells), seen = new Set(), widths = [];
+  for (const start of cells) {
+    if (seen.has(start)) continue;
+    let minx = GRID, maxx = -1, miny = GRID, maxy = -1;
+    const stack = [start]; seen.add(start);
+    while (stack.length) {
+      const idx = stack.pop(), x = idx % GRID, y = (idx - (idx % GRID)) / GRID;
+      if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+      const nbrs = [];
+      if (x > 0) nbrs.push(idx - 1); if (x < GRID - 1) nbrs.push(idx + 1);
+      if (y > 0) nbrs.push(idx - GRID); if (y < GRID - 1) nbrs.push(idx + GRID);
+      for (const n of nbrs) if (set.has(n) && !seen.has(n)) { seen.add(n); stack.push(n); }
+    }
+    widths.push(Math.max(maxx - minx + 1, maxy - miny + 1));
+  }
+  return widths;
+}
 
 // Largest all-1 rectangle in a W*H binary grid (histogram method); returns its
 // position + size, or area 0 if empty.
@@ -1573,6 +1613,7 @@ function decomposeRoom(label) {
 
 function recomputeRooms() {
   roomZone.fill(0);
+  roomData = [];
   roomOverlayCtx.clearRect(0, 0, GRID, GRID);
   const total = GRID * GRID;
   const isOpen = i => playableBuf[i] === 1 && occ[i] === 0;
@@ -1601,7 +1642,7 @@ function recomputeRooms() {
       if (cy < GRID - 1) { const n = idx + GRID; if (roomCoreBuf[n] && !roomCoreId[n]) { roomCoreId[n] = nCores; bfsQueue[t++] = n; } }
     }
   }
-  if (!nCores) { updateRoomStats([]); return; }
+  if (!nCores) { updateRoomStats([]); updateOpeningStats([]); return; }
   // each lane's biggest core is the field (not a room)
   const mainCore = {};
   for (let c = 1; c <= nCores; c++) { const ch = coreLane[c]; if (mainCore[ch] === undefined || coreSize[c] > coreSize[mainCore[ch]]) mainCore[ch] = c; }
@@ -1632,7 +1673,22 @@ function recomputeRooms() {
   for (let c = 1; c <= nCores; c++) {
     if (c === mainCore[coreLane[c]] || area[c] < ROOM_MIN_AREA) continue;
     roomAreas.push(area[c]);
-    for (let i = 0; i < total; i++) if (roomCellCore[i] === c) roomZone[i] = 1;
+    // mark the room's cells, accumulate its centroid, and collect exit cells (room
+    // cells whose open 4-neighbour belongs to a different region — i.e. a doorway).
+    let sumX = 0, sumY = 0, cnt = 0;
+    const exits = [];
+    for (let i = 0; i < total; i++) if (roomCellCore[i] === c) {
+      roomZone[i] = 1;
+      const x = i % GRID, y = (i - x) / GRID;
+      sumX += x; sumY += y; cnt++;
+      if ((x > 0        && isOpen(i - 1)    && roomCellCore[i - 1]    !== c) ||
+          (x < GRID - 1 && isOpen(i + 1)    && roomCellCore[i + 1]    !== c) ||
+          (y > 0        && isOpen(i - GRID) && roomCellCore[i - GRID] !== c) ||
+          (y < GRID - 1 && isOpen(i + GRID) && roomCellCore[i + GRID] !== c)) exits.push(i);
+    }
+    let n2 = 0, n4 = 0;
+    for (const w of groupExitRuns(exits)) { if (w <= 2) n2++; else n4++; }   // width 2 -> 2x2, width 3-4 -> 2x4
+    roomData.push({ cx: sumX / cnt, cy: sumY / cnt, size: area[c], n2, n4 });
     const hue = (roomIdx * 53 + 280) % 360;     // distinct hue per room
     roomIdx++;
     roomOverlayCtx.fillStyle = `hsla(${hue}, 80%, 58%, 0.45)`;
@@ -1641,8 +1697,27 @@ function recomputeRooms() {
     }
   }
   updateRoomStats(roomAreas);
+  updateOpeningStats(roomData);
 }
 
+// Averages of the per-room opening counts (collapsed "Room openings" panel). Opening
+// width = 2 for a 2x2 doorway, 4 for a 2x4; size/width = room cells per doorway cell.
+function updateOpeningStats(rooms) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const n = rooms.length;
+  if (!n) { set('avg2x2', '—'); set('avg2x4', '—'); set('avgOpen', '—'); set('avgRatio', '—'); return; }
+  let s2 = 0, s4 = 0, sRatio = 0;
+  for (const r of rooms) {
+    s2 += r.n2; s4 += r.n4;
+    const width = r.n2 * 2 + r.n4 * 4;
+    if (width > 0) sRatio += r.size / width;
+  }
+  const f = x => (Math.round(x * 10) / 10).toFixed(1);
+  set('avg2x2', f(s2 / n));
+  set('avg2x4', f(s4 / n));
+  set('avgOpen', f((s2 + s4) / n));
+  set('avgRatio', f(sRatio / n));
+}
 // Mean / median / mode of detected room areas (in cells), shown in the View panel.
 // Mode lists every value tied for the highest frequency; "—" when all distinct.
 function updateRoomStats(areas) {
@@ -2410,6 +2485,7 @@ function render() {
   drawChickenOverlay();
   drawRogueOverlay();
   drawCoordLabels();
+  drawRoomLabels();
   drawGhost();
   drawSelection();
   drawPasteGhost();
@@ -2441,6 +2517,31 @@ function drawCoordLabels() {
     ctx.fillRect(cx - tw / 2 - 2, cy - fs / 2 - 1, tw + 4, fs + 2);
     ctx.fillStyle = '#fff';
     ctx.fillText(label, cx, cy + 0.5);
+  }
+}
+
+// With Room zones on, Shift labels each detected room at its centroid with its size,
+// 2x2 / 2x4 opening counts, and size-to-opening-width ratio.
+function drawRoomLabels() {
+  if (!state.shiftDown || !state.showRooms || !roomData.length) return;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const fs = 12, lh = fs + 3;
+  for (const r of roomData) {
+    const p = worldToScreen(r.cx + 0.5, r.cy + 0.5);
+    if (p.x < -60 || p.x > viewW + 60 || p.y < -30 || p.y > viewH + 30) continue;
+    const width = r.n2 * 2 + r.n4 * 4;
+    const lines = [
+      `${r.size} cells`,
+      `2×2:${r.n2}  2×4:${r.n4}`,
+      `size/open ${width > 0 ? (r.size / width).toFixed(1) : '∞'}`,
+    ];
+    ctx.font = `600 ${fs}px ui-sans-serif, system-ui, sans-serif`;
+    const tw = Math.max(...lines.map(s => ctx.measureText(s).width));
+    const bh = lh * lines.length + 4;
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(p.x - tw / 2 - 5, p.y - bh / 2, tw + 10, bh);
+    ctx.fillStyle = '#fff';
+    lines.forEach((s, i) => ctx.fillText(s, p.x, p.y - bh / 2 + lh * (i + 0.5) + 2));
   }
 }
 
