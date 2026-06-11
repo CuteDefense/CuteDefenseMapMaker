@@ -323,21 +323,22 @@
         <label for="roomsToggle">Room zones (&ge;50, &le;4 openings)</label>
         <label class="switch"><input type="checkbox" id="roomsToggle"><span class="slider"></span></label>
       </div>
-      <div class="meta" id="roomStats" style="margin-top:6px">
+    </div>
+
+    <details class="group collapse">
+      <summary class="label">Rooms Data</summary>
+      <div class="meta" id="roomStats">
         <div>Rooms: <b id="roomCount">0</b></div>
         <div>Mean area: <b id="roomMean">&mdash;</b></div>
         <div>Median area: <b id="roomMedian">&mdash;</b></div>
         <div>Mode area: <b id="roomMode">&mdash;</b></div>
-      </div>
-    </div>
-
-    <details class="group collapse">
-      <summary class="label">Room openings</summary>
-      <div class="meta">
-        <div>Avg 2&times;2 openings: <b id="avg2x2">&mdash;</b></div>
+        <div style="margin-top:4px">Avg 2&times;2 openings: <b id="avg2x2">&mdash;</b></div>
         <div>Avg 2&times;4 openings: <b id="avg2x4">&mdash;</b></div>
         <div>Avg openings (all): <b id="avgOpen">&mdash;</b></div>
         <div>Avg size / opening width: <b id="avgRatio">&mdash;</b></div>
+        <div style="margin-top:4px">Avg base strength: <b id="avgStrength">&mdash;</b></div>
+        <div>Weakest base (worst&ndash;best): <b id="weakBase">&mdash;</b></div>
+        <div style="color:var(--muted)">Strength = safe-depth &times; few-openings &times; corner-safety &times; nearby support &divide; connected routes. Best/worst span the two flower phases (1&ndash;100, relative to the strongest base). Overlay tints each base by avg strength: red (weakest) &rarr; purple (strongest).</div>
         <div style="color:var(--muted)">Hold <code>Shift</code> with Room zones on to label each room.</div>
       </div>
     </details>
@@ -389,6 +390,7 @@
   </div>
 </div>
 
+<script src="base-strength.js"></script>
 <script>
 'use strict';
 /* ===========================================================================
@@ -1540,9 +1542,12 @@ const roomZone = new Uint8Array(GRID * GRID);
 const roomCoreBuf = new Uint8Array(GRID * GRID);
 const roomCoreId = new Int32Array(GRID * GRID);
 const roomCellCore = new Int32Array(GRID * GRID);
+const roomFlowerOwner = new Int32Array(GRID * GRID); // per-cell index into placedTiles of the red/blue flower covering it (-1 = none)
 const ROOM_MIN_AREA = 50;
 // Per-room analysis for the shift overlay + opening averages: one entry per detected
 // room { cx, cy (centroid, world cells), size (area cells), n2 (2x2 openings), n4 (2x4) }.
+// n2/n4 can be fractional: each boundary red/blue flower is a doorway that's open in its
+// OFF phase (only one colour is a wall at a time, 50/50) so it adds 0.5 of a 2x2 opening.
 let roomData = [];
 
 // Group exit cells (room cells bordering open non-room space) into 4-connected runs;
@@ -1611,12 +1616,60 @@ function decomposeRoom(label) {
   return rects;
 }
 
+// 6-stop worst->best gradient: red, orange, yellow, green, blue, purple.
+const STRENGTH_STOPS = [[224, 49, 49], [247, 103, 7], [250, 200, 30], [47, 158, 68], [28, 126, 214], [156, 54, 181]];
+function strengthGradient(t, alpha) {
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const f = t * (STRENGTH_STOPS.length - 1);
+  const i = Math.min(STRENGTH_STOPS.length - 2, Math.floor(f)), k = f - i;
+  const a = STRENGTH_STOPS[i], b = STRENGTH_STOPS[i + 1];
+  const mix = j => Math.round(a[j] + (b[j] - a[j]) * k);
+  return `rgba(${mix(0)},${mix(1)},${mix(2)},${alpha == null ? 0.5 : alpha})`;
+}
+// Paint the room overlay: each base coloured by its AVERAGE strength on the worst->best
+// gradient (red = weakest base on the map, purple = strongest). Falls back to distinct
+// hues when strengths weren't computed (base-strength.js missing / errored).
+function paintRoomOverlay() {
+  roomOverlayCtx.clearRect(0, 0, GRID, GRID);
+  const graded = roomData.length > 0 && roomData.every(r => r.strength != null);
+  let minS = Infinity, maxS = -Infinity;
+  if (graded) for (const r of roomData) { if (r.strength < minS) minS = r.strength; if (r.strength > maxS) maxS = r.strength; }
+  const span = maxS - minS;
+  roomData.forEach((r, i) => {
+    roomOverlayCtx.fillStyle = graded
+      ? strengthGradient(span > 0 ? (r.strength - minS) / span : 1)   // single/equal bases -> best (purple)
+      : `hsla(${(i * 53 + 280) % 360}, 80%, 58%, 0.45)`;
+    for (const rr of r.rects || []) roomOverlayCtx.fillRect(rr.x0, GRID - 1 - rr.y1, rr.x1 - rr.x0 + 1, rr.y1 - rr.y0 + 1);  // y-flip
+  });
+}
+
 function recomputeRooms() {
   roomZone.fill(0);
   roomData = [];
   roomOverlayCtx.clearRect(0, 0, GRID, GRID);
   const total = GRID * GRID;
   const isOpen = i => playableBuf[i] === 1 && occ[i] === 0;
+
+  // Map each cell to the red/blue flower tile (2x2) covering it. Flowers are PHASE walls
+  // — a red flower blocks only in the red phase, a blue only in the blue phase, and the
+  // game shows exactly one colour at a time (50/50). So a boundary flower is a doorway
+  // that's open half the time; we credit each as 0.5 of an opening below.
+  roomFlowerOwner.fill(-1);
+  for (let k = 0; k < placedTiles.length; k++) {
+    const t = placedTiles[k];
+    if (t.type !== 'RedFlowers' && t.type !== 'BlueFlowers') continue;
+    const b = t.y * GRID + t.x;
+    roomFlowerOwner[b] = k; roomFlowerOwner[b + 1] = k;
+    roomFlowerOwner[b + GRID] = k; roomFlowerOwner[b + GRID + 1] = k;
+  }
+  // Refresh the per-phase wall bitmaps (always-walls + that phase's flowers) so the
+  // base-strength model sees current geometry regardless of recomputeValidity order.
+  redOccBuf.fill(0); blueOccBuf.fill(0);
+  for (const t of placedTiles) {
+    const always = (t.type === 'TallShrubs' || t.type === 'Flowers');
+    if (always || t.type === 'RedFlowers')  markInto(redOccBuf, t.x, t.y);
+    if (always || t.type === 'BlueFlowers') markInto(blueOccBuf, t.x, t.y);
+  }
 
   // erode by Chebyshev-2 (5x5 all-open) — pinches off openings <= 4 wide/tall
   roomCoreBuf.fill(0);
@@ -1642,7 +1695,7 @@ function recomputeRooms() {
       if (cy < GRID - 1) { const n = idx + GRID; if (roomCoreBuf[n] && !roomCoreId[n]) { roomCoreId[n] = nCores; bfsQueue[t++] = n; } }
     }
   }
-  if (!nCores) { updateRoomStats([]); updateOpeningStats([]); return; }
+  if (!nCores) { updateRoomStats([]); updateOpeningStats([]); updateStrengthStats(null, 1); return; }
   // each lane's biggest core is the field (not a room)
   const mainCore = {};
   for (let c = 1; c <= nCores; c++) { const ch = coreLane[c]; if (mainCore[ch] === undefined || coreSize[c] > coreSize[mainCore[ch]]) mainCore[ch] = c; }
@@ -1668,7 +1721,6 @@ function recomputeRooms() {
   // area of each dilated region; rooms = non-main cores with area >= 50
   const area = new Int32Array(nCores + 1);
   for (let i = 0; i < total; i++) { const c = roomCellCore[i]; if (c) area[c]++; }
-  let roomIdx = 0;
   const roomAreas = [];
   for (let c = 1; c <= nCores; c++) {
     if (c === mainCore[coreLane[c]] || area[c] < ROOM_MIN_AREA) continue;
@@ -1677,30 +1729,71 @@ function recomputeRooms() {
     // cells whose open 4-neighbour belongs to a different region — i.e. a doorway).
     let sumX = 0, sumY = 0, cnt = 0;
     const exits = [];
+    const roomCells = [];           // this room's cells (fed to the base-strength model)
+    const adjFlowers = new Set();   // flower tiles (indices) bordering this room
     for (let i = 0; i < total; i++) if (roomCellCore[i] === c) {
       roomZone[i] = 1;
+      roomCells.push(i);
       const x = i % GRID, y = (i - x) / GRID;
       sumX += x; sumY += y; cnt++;
       if ((x > 0        && isOpen(i - 1)    && roomCellCore[i - 1]    !== c) ||
           (x < GRID - 1 && isOpen(i + 1)    && roomCellCore[i + 1]    !== c) ||
           (y > 0        && isOpen(i - GRID) && roomCellCore[i - GRID] !== c) ||
           (y < GRID - 1 && isOpen(i + GRID) && roomCellCore[i + GRID] !== c)) exits.push(i);
+      if (x > 0        && roomFlowerOwner[i - 1]    >= 0) adjFlowers.add(roomFlowerOwner[i - 1]);
+      if (x < GRID - 1 && roomFlowerOwner[i + 1]    >= 0) adjFlowers.add(roomFlowerOwner[i + 1]);
+      if (y > 0        && roomFlowerOwner[i - GRID] >= 0) adjFlowers.add(roomFlowerOwner[i - GRID]);
+      if (y < GRID - 1 && roomFlowerOwner[i + GRID] >= 0) adjFlowers.add(roomFlowerOwner[i + GRID]);
     }
     let n2 = 0, n4 = 0;
-    for (const w of groupExitRuns(exits)) { if (w <= 2) n2++; else n4++; }   // width 2 -> 2x2, width 3-4 -> 2x4
-    roomData.push({ cx: sumX / cnt, cy: sumY / cnt, size: area[c], n2, n4 });
-    const hue = (roomIdx * 53 + 280) % 360;     // distinct hue per room
-    roomIdx++;
-    roomOverlayCtx.fillStyle = `hsla(${hue}, 80%, 58%, 0.45)`;
-    for (const r of decomposeRoom(c)) {
-      roomOverlayCtx.fillRect(r.x0, GRID - 1 - r.y1, r.x1 - r.x0 + 1, r.y1 - r.y0 + 1);  // y-flip
+    for (const w of groupExitRuns(exits)) { if (w <= 2) n2++; else n4++; }   // genuine (no-tile) gaps, present every phase
+    // Each bordering flower is a wall only in its own phase, so it's a doorway open the
+    // OTHER 50% of the time -> +0.5 of a 2x2 opening (flowers are 2x2). The per-flower
+    // average is 0.5 regardless of colour (red opens exactly when blue is the active wall
+    // and vice versa). 1 red + 1 blue -> 1.0; two reds -> 1.0 (both open together half the
+    // time, neither the rest). Skip flowers that don't bridge this room to open non-room
+    // space (a flower buried in a thick wall opens onto more wall, not a doorway).
+    for (const fi of adjFlowers) {
+      const ft = placedTiles[fi];
+      const fcells = [ft.y * GRID + ft.x, ft.y * GRID + ft.x + 1, (ft.y + 1) * GRID + ft.x, (ft.y + 1) * GRID + ft.x + 1];
+      let leadsOut = false;
+      for (const fc of fcells) {
+        const fx = fc % GRID, fy = (fc - (fc % GRID)) / GRID;
+        if ((fx > 0        && isOpen(fc - 1)    && roomCellCore[fc - 1]    !== c) ||
+            (fx < GRID - 1 && isOpen(fc + 1)    && roomCellCore[fc + 1]    !== c) ||
+            (fy > 0        && isOpen(fc - GRID) && roomCellCore[fc - GRID] !== c) ||
+            (fy < GRID - 1 && isOpen(fc + GRID) && roomCellCore[fc + GRID] !== c)) { leadsOut = true; break; }
+      }
+      if (leadsOut) n2 += 0.5;
     }
+    // store cells + rectangle decomposition; the overlay is painted by strength below
+    roomData.push({ cx: sumX / cnt, cy: sumY / cnt, size: area[c], n2, n4, cells: roomCells, rects: decomposeRoom(c) });
   }
   updateRoomStats(roomAreas);
   updateOpeningStats(roomData);
+
+  // Base defensibility — best/worst/avg strength across the two flower phases (see
+  // base-strength.js). Attach a 0-100 score to each room for the overlay + panel.
+  if (typeof BaseStrength !== 'undefined' && BaseStrength.computeBaseStrengths && roomData.length) {
+    try {
+      const res = BaseStrength.computeBaseStrengths({
+        GRID, playable: playableBuf, redOcc: redOccBuf, blueOcc: blueOccBuf,
+        bases: roomData.map((r, i) => ({ id: i, cells: r.cells })),
+      });
+      let maxS = 1;
+      for (const b of res.bases) if (b.strength > maxS) maxS = b.strength;
+      res.bases.forEach((b, i) => {
+        roomData[i].strength = b.strength100;
+        roomData[i].sWorst100 = 100 * b.strengthWorst / maxS;
+        roomData[i].sBest100 = 100 * b.strengthBest / maxS;
+      });
+      updateStrengthStats(res, maxS);
+    } catch (e) { console.warn('base-strength failed', e); updateStrengthStats(null, 1); }
+  } else updateStrengthStats(null, 1);
+  paintRoomOverlay();   // colour each base by its average strength (red worst -> purple best)
 }
 
-// Averages of the per-room opening counts (collapsed "Room openings" panel). Opening
+// Averages of the per-room opening counts (collapsed "Rooms Data" panel). Opening
 // width = 2 for a 2x2 doorway, 4 for a 2x4; size/width = room cells per doorway cell.
 function updateOpeningStats(rooms) {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -1717,6 +1810,20 @@ function updateOpeningStats(rooms) {
   set('avg2x4', f(s4 / n));
   set('avgOpen', f((s2 + s4) / n));
   set('avgRatio', f(sRatio / n));
+}
+
+// Base-strength panel: average defensibility + the weakest base (its worst-best phase
+// span). Scores are 0-100 relative to the strongest base on the map.
+function updateStrengthStats(res, maxS) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  if (!res || !res.bases.length) { set('avgStrength', '—'); set('weakBase', '—'); return; }
+  const avg = res.bases.reduce((s, b) => s + b.strength100, 0) / res.bases.length;
+  let weak = res.bases[0];
+  for (const b of res.bases) if (b.strength < weak.strength) weak = b;
+  const w = 100 * weak.strengthWorst / maxS, wb = 100 * weak.strengthBest / maxS;
+  const r0 = x => Math.round(x);
+  set('avgStrength', `${r0(avg)} / 100`);
+  set('weakBase', `${r0(weak.strength100)}  (${r0(w)}–${r0(wb)})`);
 }
 // Mean / median / mode of detected room areas (in cells), shown in the View panel.
 // Mode lists every value tied for the highest frequency; "—" when all distinct.
@@ -2522,6 +2629,13 @@ function drawCoordLabels() {
 
 // With Room zones on, Shift labels each detected room at its centroid with its size,
 // 2x2 / 2x4 opening counts, and size-to-opening-width ratio.
+// A base's strength label: min (worst phase) – max (best phase), or a single value
+// when flowers don't change it (no red/blue flowers, or none border this base).
+function roomStrengthText(r) {
+  const lo = Math.round(r.sWorst100 != null ? r.sWorst100 : r.strength);
+  const hi = Math.round(r.sBest100 != null ? r.sBest100 : r.strength);
+  return lo === hi ? `str ${lo}` : `str ${lo}–${hi}`;
+}
 function drawRoomLabels() {
   if (!state.shiftDown || !state.showRooms || !roomData.length) return;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -2530,11 +2644,13 @@ function drawRoomLabels() {
     const p = worldToScreen(r.cx + 0.5, r.cy + 0.5);
     if (p.x < -60 || p.x > viewW + 60 || p.y < -30 || p.y > viewH + 30) continue;
     const width = r.n2 * 2 + r.n4 * 4;
+    const fo = v => (Math.round(v * 2) / 2).toString();   // counts are multiples of 0.5 (flowers add 0.5)
     const lines = [
       `${r.size} cells`,
-      `2×2:${r.n2}  2×4:${r.n4}`,
+      `2×2:${fo(r.n2)}  2×4:${fo(r.n4)}`,
       `size/open ${width > 0 ? (r.size / width).toFixed(1) : '∞'}`,
-    ];
+      r.strength != null ? roomStrengthText(r) : null,
+    ].filter(Boolean);
     ctx.font = `600 ${fs}px ui-sans-serif, system-ui, sans-serif`;
     const tw = Math.max(...lines.map(s => ctx.measureText(s).width));
     const bh = lh * lines.length + 4;
