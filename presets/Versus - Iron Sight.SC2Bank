@@ -95,7 +95,7 @@
             <Value point="89,125"/>
         </Key>
         <Key name="31">
-            <Value point="60,124"/>
+            <Value point="57,111"/>
         </Key>
         <Key name="32">
             <Value point="65,61"/>
@@ -335,7 +335,7 @@
             <Value point="103,112"/>
         </Key>
         <Key name="111">
-            <Value point="62,126"/>
+            <Value point="77,125"/>
         </Key>
         <Key name="112">
             <Value point="31,35"/>
@@ -728,7 +728,7 @@
             <Value point="103,105"/>
         </Key>
         <Key name="242">
-            <Value point="60,126"/>
+            <Value point="43,125"/>
         </Key>
         <Key name="243">
             <Value point="31,127"/>
@@ -995,7 +995,7 @@
             <Value point="65,105"/>
         </Key>
         <Key name="331">
-            <Value point="58,126"/>
+            <Value point="63,111"/>
         </Key>
         <Key name="332">
             <Value point="79,43"/>
@@ -1328,16 +1328,22 @@
             <Value point="16,112"/>
         </Key>
         <Key name="442">
-            <Value point="57,111"/>
+            <Value point="60,123"/>
         </Key>
         <Key name="443">
-            <Value point="77,125"/>
+            <Value point="65,128"/>
         </Key>
         <Key name="444">
-            <Value point="43,125"/>
+            <Value point="60,125"/>
         </Key>
         <Key name="445">
-            <Value point="63,111"/>
+            <Value point="57,128"/>
+        </Key>
+        <Key name="446">
+            <Value point="63,128"/>
+        </Key>
+        <Key name="447">
+            <Value point="55,128"/>
         </Key>
     </Section>
     <Section name="Flowers">
@@ -1420,7 +1426,7 @@
     </Section>
     <Section name="Count">
         <Key name="TallShrubs">
-            <Value int="446"/>
+            <Value int="448"/>
         </Key>
         <Key name="Flowers">
             <Value int="16"/>
@@ -1458,7 +1464,7 @@
     </Section>
     <Section name="PlayerSpawner">
         <Key name="0">
-            <Value point="58,128"/>
+            <Value point="60,128"/>
         </Key>
     </Section>
     <Section name="Spawner">
