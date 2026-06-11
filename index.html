@@ -1542,6 +1542,7 @@ const roomZone = new Uint8Array(GRID * GRID);
 const roomCoreBuf = new Uint8Array(GRID * GRID);
 const roomCoreId = new Int32Array(GRID * GRID);
 const roomCellCore = new Int32Array(GRID * GRID);
+const yellowFlowerBuf = new Uint8Array(GRID * GRID);  // 1 where a basic (yellow) Flowers tile covers — always a wall, so the per-phase model can't see it as a doorway
 const ROOM_MIN_AREA = 50;
 // Per-room analysis for the shift overlay + opening averages: one entry per detected
 // room { cx, cy (centroid, world cells), size (area cells), n2 (2x2 openings), n4 (2x4) }.
@@ -1624,7 +1625,7 @@ function strengthGradient(t, alpha) {
   const i = Math.min(STRENGTH_STOPS.length - 2, Math.floor(f)), k = f - i;
   const a = STRENGTH_STOPS[i], b = STRENGTH_STOPS[i + 1];
   const mix = j => Math.round(a[j] + (b[j] - a[j]) * k);
-  return `rgba(${mix(0)},${mix(1)},${mix(2)},${alpha == null ? 0.5 : alpha})`;
+  return `rgba(${mix(0)},${mix(1)},${mix(2)},${alpha == null ? 0.72 : alpha})`;
 }
 // Paint the room overlay: each base coloured by its AVERAGE strength on the worst->best
 // gradient (red = weakest base on the map, purple = strongest). Falls back to distinct
@@ -1638,7 +1639,7 @@ function paintRoomOverlay() {
   roomData.forEach((r, i) => {
     roomOverlayCtx.fillStyle = graded
       ? strengthGradient(span > 0 ? (r.strength - minS) / span : 1)   // single/equal bases -> best (purple)
-      : `hsla(${(i * 53 + 280) % 360}, 80%, 58%, 0.45)`;
+      : `hsla(${(i * 53 + 280) % 360}, 80%, 58%, 0.65)`;
     for (const rr of r.rects || []) roomOverlayCtx.fillRect(rr.x0, GRID - 1 - rr.y1, rr.x1 - rr.x0 + 1, rr.y1 - rr.y0 + 1);  // y-flip
   });
 }
@@ -1652,11 +1653,14 @@ function recomputeRooms() {
 
   // Refresh the per-phase wall bitmaps (always-walls + that phase's flowers) so the
   // base-strength model sees current geometry regardless of recomputeValidity order.
-  redOccBuf.fill(0); blueOccBuf.fill(0);
+  // yellowFlowerBuf tracks basic (yellow) flowers — always walls, so the model never
+  // sees them as doorways; they're added as 0.5-openings separately below.
+  redOccBuf.fill(0); blueOccBuf.fill(0); yellowFlowerBuf.fill(0);
   for (const t of placedTiles) {
     const always = (t.type === 'TallShrubs' || t.type === 'Flowers');
     if (always || t.type === 'RedFlowers')  markInto(redOccBuf, t.x, t.y);
     if (always || t.type === 'BlueFlowers') markInto(blueOccBuf, t.x, t.y);
+    if (t.type === 'Flowers') markInto(yellowFlowerBuf, t.x, t.y);
   }
 
   // erode by Chebyshev-2 (5x5 all-open) — pinches off openings <= 4 wide/tall
@@ -1764,6 +1768,19 @@ function recomputeRooms() {
       updateStrengthStats(res, maxS);
     } catch (e) { console.warn('base-strength failed', e); updateStrengthStats(null, 1); }
   } else updateStrengthStats(null, 1);
+  // Basic (yellow) flowers always block both phases, so the per-phase model can't see
+  // them as doorways — but a flower walling a base is still a weak point. Add each as
+  // 0.5 of an opening: a base cell touching a yellow-flower cell is a half-doorway, and
+  // adjacent yellow flowers group into one wider opening (like the model's doorways).
+  for (let i = 0; i < roomData.length; i++) {
+    const ym = [];
+    for (const idx of roomData[i].cells) {
+      const x = idx % GRID, y = (idx - x) / GRID;
+      if ((x > 0 && yellowFlowerBuf[idx - 1]) || (x < GRID - 1 && yellowFlowerBuf[idx + 1]) ||
+          (y > 0 && yellowFlowerBuf[idx - GRID]) || (y < GRID - 1 && yellowFlowerBuf[idx + GRID])) ym.push(idx);
+    }
+    for (const w of groupExitRuns(ym)) { if (w <= 2) roomData[i].n2 += 0.5; else roomData[i].n4 += 0.5; }
+  }
   updateOpeningStats(roomData);
   paintRoomOverlay();   // colour each base by its average strength (red worst -> purple best)
 }
