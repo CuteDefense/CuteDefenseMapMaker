@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Bank version="1">
+    <Section name="TallShrubs">
+        <Key name="0">
+            <Value point="115,105"/>
+        </Key>
+        <Key name="1">
+            <Value point="115,107"/>
+        </Key>
+        <Key name="2">
+            <Value point="115,113"/>
+        </Key>
+        <Key name="3">
+            <Value point="115,115"/>
+        </Key>
+        <Key name="4">
+            <Value point="113,115"/>
+        </Key>
+        <Key name="5">
+            <Value point="105,115"/>
+        </Key>
+        <Key name="6">
+            <Value point="107,115"/>
+        </Key>
+        <Key name="7">
+            <Value point="107,122"/>
+        </Key>
+        <Key name="8">
+            <Value point="105,122"/>
+        </Key>
+        <Key name="9">
+            <Value point="113,122"/>
+        </Key>
+        <Key name="10">
+            <Value point="115,122"/>
+        </Key>
+        <Key name="11">
+            <Value point="115,124"/>
+        </Key>
+        <Key name="12">
+            <Value point="122,107"/>
+        </Key>
+        <Key name="13">
+            <Value point="122,105"/>
+        </Key>
+        <Key name="14">
+            <Value point="122,113"/>
+        </Key>
+        <Key name="15">
+            <Value point="122,115"/>
+        </Key>
+        <Key name="16">
+            <Value point="124,115"/>
+        </Key>
+        <Key name="17">
+            <Value point="122,122"/>
+        </Key>
+        <Key name="18">
+            <Value point="122,124"/>
+        </Key>
+        <Key name="19">
+            <Value point="124,122"/>
+        </Key>
+    </Section>
+    <Section name="Flowers">
+    </Section>
+    <Section name="RedFlowers">
+    </Section>
+    <Section name="BlueFlowers">
+    </Section>
+    <Section name="Count">
+        <Key name="TallShrubs">
+            <Value int="20"/>
+        </Key>
+        <Key name="Flowers">
+            <Value int="0"/>
+        </Key>
+        <Key name="RedFlowers">
+            <Value int="0"/>
+        </Key>
+        <Key name="BlueFlowers">
+            <Value int="0"/>
+        </Key>
+        <Key name="PlayerSpawner">
+            <Value int="1"/>
+        </Key>
+        <Key name="Spawner">
+            <Value int="0"/>
+        </Key>
+        <Key name="Castle">
+            <Value int="0"/>
+        </Key>
+        <Key name="Fountain">
+            <Value int="0"/>
+        </Key>
+        <Key name="Tower">
+            <Value int="0"/>
+        </Key>
+        <Key name="Merchant">
+            <Value int="0"/>
+        </Key>
+        <Key name="Market">
+            <Value int="0"/>
+        </Key>
+        <Key name="Cutemental">
+            <Value int="0"/>
+        </Key>
+    </Section>
+    <Section name="PlayerSpawner">
+        <Key name="0">
+            <Value point="128,128"/>
+        </Key>
+    </Section>
+    <Section name="Spawner">
+    </Section>
+    <Section name="Castle">
+    </Section>
+    <Section name="Fountain">
+    </Section>
+    <Section name="Tower">
+    </Section>
+    <Section name="Merchant">
+    </Section>
+    <Section name="Market">
+    </Section>
+    <Section name="Cutemental">
+    </Section>
+    <Section name="Disabled Mirror">
+        <Key name="Horizontal">
+            <Value flag="0"/>
+        </Key>
+        <Key name="Vertical">
+            <Value flag="0"/>
+        </Key>
+    </Section>
+</Bank>
