@@ -6,7 +6,7 @@
  *
  * WHAT "STRENGTH" MEANS
  *   How hard a walled base (room) is to break into / how easily it's defended,
- *   in the spirit of Cute Defense: you win by minimising the
+ *   in the spirit Cute Defense: you win by minimising the
  *   number of fronts you must hold, keeping a deep safe core, and leaning on
  *   neighbouring strength. Higher score = stronger (harder to attack).
  *
@@ -40,6 +40,9 @@
     supportSigma: 55,   // neighbour-support falloff in cells (exp(-dist/sigma))
     support: 0.60,      // weight of neighbour support (raises strength)
     routes: 0.30,       // weight of connected-base route penalty (lowers strength)
+    neighborReliance: 0.35, // openings facing OTHER bases (not the field) aren't real cover —
+                            // a neighbour base may sit empty. Up to this fraction off strength
+                            // when ALL of a base's exposure faces other bases.
   };
 
   function neigh4(i, x, y, G) {
@@ -79,18 +82,19 @@
 
   // ---- per-phase analysis of one base ------------------------------------
   // occP[i] === 1  => cell i is a wall in this phase.
-  function analyzePhase(base, occP, playable, G, W) {
+  function analyzePhase(base, occP, playable, G, W, inBase) {
     var cells = base.cells, set = base.set;
     var openP = function (i) { return playable[i] === 1 && occP[i] === 0; };
 
     // Mouth = base cells touching open, NON-base space this phase (a doorway).
     // (A genuine no-tile gap is open every phase; an off-colour flower opens this
     // phase — both turn the adjacent base cell into a mouth automatically.)
-    var mouth = [];
+    // baseFacing = mouth cells whose open neighbour is ANOTHER base, not the field.
+    var mouth = [], baseFacing = 0;
     for (var c = 0; c < cells.length; c++) {
-      var i = cells[c], x = i % G, y = (i - (i % G)) / G, nb = neigh4(i, x, y, G), isMouth = false;
-      for (var j = 0; j < nb.length; j++) { var m = nb[j]; if (!set.has(m) && openP(m)) { isMouth = true; break; } }
-      if (isMouth) mouth.push(i);
+      var i = cells[c], x = i % G, y = (i - (i % G)) / G, nb = neigh4(i, x, y, G), isMouth = false, facesBase = false;
+      for (var j = 0; j < nb.length; j++) { var m = nb[j]; if (!set.has(m) && openP(m)) { isMouth = true; if (inBase && inBase[m]) facesBase = true; } }
+      if (isMouth) { mouth.push(i); if (facesBase) baseFacing++; }
     }
     var openings = groupRuns(mouth, G);
     var nOpen = openings.length;
@@ -153,9 +157,12 @@
       intrinsic = depthValue * routeMult * widthMult * cornerMult;
     }
 
+    var n2 = 0, n4 = 0;
+    for (var wi = 0; wi < openings.length; wi++) { if (openings[wi].width <= 2) n2++; else n4++; }
     return {
       nOpen: nOpen, openings: openings.map(function (o) { return { width: o.width, cx: o.cx, cy: o.cy }; }),
-      totalWidth: totalWidth, avgWidth: avgWidth, sealed: sealed,
+      totalWidth: totalWidth, avgWidth: avgWidth, sealed: sealed, n2: n2, n4: n4,
+      mouthCount: mouth.length, baseFacing: baseFacing,
       depthValue: depthValue, maxDepth: maxDepth, cornerFactor: cornerFactor, intrinsic: intrinsic,
     };
   }
@@ -176,20 +183,35 @@
       return { id: b.id, cells: b.cells, set: set, area: b.cells.length, minx: minx, maxx: maxx, miny: miny, maxy: maxy, cx: sx / n, cy: sy / n };
     });
 
-    // ---- per-phase intrinsic strength ----
+    // cells inside ANY base — used for routes + for flagging openings that face a neighbour
+    var inBase = new Uint8Array(total);
+    bases.forEach(function (b) { for (var k = 0; k < b.cells.length; k++) inBase[b.cells[k]] = 1; });
+
+    // ---- per-scenario intrinsic strength ----
+    // Four equally-likely scenarios: {red | blue active phase} x {yellow flowers spawned |
+    // absent}. best = the most-sealed scenario, worst = the most-open, avg = their mean.
+    // Averaging opening counts over the four gives every flower 0.5 (open in 2 of 4) and a
+    // genuine no-tile gap 1 (open in all 4).
+    var yellow = input.yellowOcc || new Uint8Array(total);
+    function minusYellow(occ) { var o = new Uint8Array(total); for (var i = 0; i < total; i++) o[i] = (occ[i] && !yellow[i]) ? 1 : 0; return o; }
+    var scenarios = [redOcc, blueOcc, minusYellow(redOcc), minusYellow(blueOcc)];
     bases.forEach(function (b) {
-      b.red = analyzePhase(b, redOcc, playable, G, W);
-      b.blue = analyzePhase(b, blueOcc, playable, G, W);
-      b.intrinsicBest = Math.max(b.red.intrinsic, b.blue.intrinsic);
-      b.intrinsicWorst = Math.min(b.red.intrinsic, b.blue.intrinsic);
-      b.intrinsicAvg = (b.red.intrinsic + b.blue.intrinsic) / 2;
-      b.avgOpenings = (b.red.nOpen + b.blue.nOpen) / 2;
+      var ph = scenarios.map(function (occ) { return analyzePhase(b, occ, playable, G, W, inBase); });
+      var intr = ph.map(function (p) { return p.intrinsic; });
+      b.intrinsicBest = Math.max.apply(null, intr);
+      b.intrinsicWorst = Math.min.apply(null, intr);
+      b.intrinsicAvg = intr.reduce(function (a, v) { return a + v; }, 0) / ph.length;
+      b.avgN2 = ph.reduce(function (a, p) { return a + p.n2; }, 0) / ph.length;
+      b.avgN4 = ph.reduce(function (a, p) { return a + p.n4; }, 0) / ph.length;
+      b.avgOpenings = ph.reduce(function (a, p) { return a + p.nOpen; }, 0) / ph.length;
+      var mc = ph.reduce(function (a, p) { return a + p.mouthCount; }, 0);
+      var bf = ph.reduce(function (a, p) { return a + p.baseFacing; }, 0);
+      b.neighborFacing = mc > 0 ? bf / mc : 0;     // fraction of exposure facing OTHER bases
+      b.red = ph[0]; b.blue = ph[1];               // representative (yellow-present) phases for callers
     });
 
     // ---- connectivity: which bases share an open-field network (enemy routes) ----
     // Label the field = open-in-either-phase cells that are NOT inside any base.
-    var inBase = new Uint8Array(total);
-    bases.forEach(function (b) { for (var k = 0; k < b.cells.length; k++) inBase[b.cells[k]] = 1; });
     var openEither = function (i) { return playable[i] === 1 && (redOcc[i] === 0 || blueOcc[i] === 0); };
     var fieldComp = new Int32Array(total).fill(0), nf = 0, q = new Int32Array(total);
     for (var s = 0; s < total; s++) {
@@ -234,9 +256,11 @@
       b.supportNorm = support / maxIntrinsic;            // ~ number of strong close neighbours
       b.routesNorm = b.routes / meanOpen;                // ~ extra routes vs a typical base
       b.modifier = (1 + W.support * b.supportNorm) / (1 + W.routes * b.routesNorm);
-      b.strength = b.intrinsicAvg * b.modifier;
-      b.strengthBest = b.intrinsicBest * b.modifier;
-      b.strengthWorst = b.intrinsicWorst * b.modifier;
+      // openings facing other bases aren't reliable cover (the neighbour may sit empty)
+      b.neighborMult = 1 - W.neighborReliance * b.neighborFacing;
+      b.strength = b.intrinsicAvg * b.modifier * b.neighborMult;
+      b.strengthBest = b.intrinsicBest * b.modifier * b.neighborMult;
+      b.strengthWorst = b.intrinsicWorst * b.modifier * b.neighborMult;
     });
 
     // ---- normalise to 0..100 (relative to the strongest base) + aggregate ----
@@ -255,8 +279,9 @@
           id: b.id, area: b.area, centroid: { x: b.cx, y: b.cy },
           red: b.red, blue: b.blue,
           intrinsicBest: b.intrinsicBest, intrinsicWorst: b.intrinsicWorst, intrinsicAvg: b.intrinsicAvg,
-          avgOpenings: b.avgOpenings, support: b.support, routes: b.routes, connectedTo: b.connectedTo,
-          modifier: b.modifier,
+          avgN2: b.avgN2, avgN4: b.avgN4, avgOpenings: b.avgOpenings,
+          support: b.support, routes: b.routes, connectedTo: b.connectedTo,
+          modifier: b.modifier, neighborFacing: b.neighborFacing, neighborMult: b.neighborMult,
           strength: b.strength, strengthBest: b.strengthBest, strengthWorst: b.strengthWorst, strength100: b.strength100,
         };
       }),
