@@ -549,9 +549,9 @@ const STRUCT_DEFS = {
   Tower:    { size: 6, color: '#ff922b', modes: ['tow'], glyph: 'T' },
   Merchant: { size: 4, color: '#a61e4d', modes: ['horde', 'tow'], glyph: 'Me' },
   Market:   { size: 4, color: '#5c940d', modes: ['horde', 'tow'], glyph: 'Mk', galaxy: 'Marketplace' },  // game type name differs
-  // Tug-of-War 1x1 bush: a building (id "Bush") that ACTS LIKE A WALL — wall:true marks its
+  // Tug-of-War 2x2 bush: a building (id "Bush") that ACTS LIKE A WALL — wall:true marks its
   // cells as walls in both flower phases so it blocks pathing/room analysis. Uncapped.
-  Bush:     { size: 1, color: '#74b816', modes: ['tow'], glyph: 'B', wall: true },
+  Bush:     { size: 2, color: '#74b816', modes: ['tow'], glyph: 'B', wall: true },
   // Predator-only 8x8 "Predatorling Spawn" = the predator spawner (exactly one). It is
   // NOT a building — asPlayerSpawner routes it into the bank's PlayerSpawner section
   // and the Galaxy export emits gf_InitializationMapSpawnPoint(cx,cy,spawnId), i.e. a
@@ -601,7 +601,7 @@ const PALETTE = [
   { type: 'Tower',         label: 'Tower',          color: STRUCT_DEFS.Tower.color,    structure: true, modes: STRUCT_DEFS.Tower.modes },
   { type: 'Merchant',      label: 'Merchant',       color: STRUCT_DEFS.Merchant.color, structure: true, modes: STRUCT_DEFS.Merchant.modes },
   { type: 'Market',        label: 'Market',         color: STRUCT_DEFS.Market.color,   structure: true, modes: STRUCT_DEFS.Market.modes },
-  { type: 'Bush',          label: 'Bush (wall)',    color: STRUCT_DEFS.Bush.color,     structure: true, modes: STRUCT_DEFS.Bush.modes },
+  { type: 'Bush',          label: 'Bush',           color: STRUCT_DEFS.Bush.color,     structure: true, modes: STRUCT_DEFS.Bush.modes },
   { type: 'Cutemental',    label: 'Cutemental',     color: STRUCT_DEFS.Cutemental.color, structure: true, modes: STRUCT_DEFS.Cutemental.modes },
   { type: 'Predatorling',  label: 'Predatorling Spawn', color: STRUCT_DEFS.Predatorling.color, structure: true, modes: STRUCT_DEFS.Predatorling.modes },
   // Rogue Crawl room types (the only buildables in that mode).
