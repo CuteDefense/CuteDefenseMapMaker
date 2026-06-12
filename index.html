@@ -549,6 +549,9 @@ const STRUCT_DEFS = {
   Tower:    { size: 6, color: '#ff922b', modes: ['tow'], glyph: 'T' },
   Merchant: { size: 4, color: '#a61e4d', modes: ['horde', 'tow'], glyph: 'Me' },
   Market:   { size: 4, color: '#5c940d', modes: ['horde', 'tow'], glyph: 'Mk', galaxy: 'Marketplace' },  // game type name differs
+  // Tug-of-War 1x1 bush: a building (id "Bush") that ACTS LIKE A WALL — wall:true marks its
+  // cells as walls in both flower phases so it blocks pathing/room analysis. Uncapped.
+  Bush:     { size: 1, color: '#74b816', modes: ['tow'], glyph: 'B', wall: true },
   // Predator-only 8x8 "Predatorling Spawn" = the predator spawner (exactly one). It is
   // NOT a building — asPlayerSpawner routes it into the bank's PlayerSpawner section
   // and the Galaxy export emits gf_InitializationMapSpawnPoint(cx,cy,spawnId), i.e. a
@@ -598,6 +601,7 @@ const PALETTE = [
   { type: 'Tower',         label: 'Tower',          color: STRUCT_DEFS.Tower.color,    structure: true, modes: STRUCT_DEFS.Tower.modes },
   { type: 'Merchant',      label: 'Merchant',       color: STRUCT_DEFS.Merchant.color, structure: true, modes: STRUCT_DEFS.Merchant.modes },
   { type: 'Market',        label: 'Market',         color: STRUCT_DEFS.Market.color,   structure: true, modes: STRUCT_DEFS.Market.modes },
+  { type: 'Bush',          label: 'Bush (wall)',    color: STRUCT_DEFS.Bush.color,     structure: true, modes: STRUCT_DEFS.Bush.modes },
   { type: 'Cutemental',    label: 'Cutemental',     color: STRUCT_DEFS.Cutemental.color, structure: true, modes: STRUCT_DEFS.Cutemental.modes },
   { type: 'Predatorling',  label: 'Predatorling Spawn', color: STRUCT_DEFS.Predatorling.color, structure: true, modes: STRUCT_DEFS.Predatorling.modes },
   // Rogue Crawl room types (the only buildables in that mode).
@@ -1454,6 +1458,7 @@ function recomputeValidity() {
     if (always || t.type === 'RedFlowers')  markInto(redOccBuf, t.x, t.y);
     if (always || t.type === 'BlueFlowers') markInto(blueOccBuf, t.x, t.y);
   }
+  markWallStructures(redOccBuf, blueOccBuf);   // Bush blocks pathing in both phases
   if (state.gameMode === 'chickenclub') { recomputeChickenValidity(); return; }
   const r = phaseValid(redOccBuf);
   const b = phaseValid(blueOccBuf);
@@ -1542,6 +1547,18 @@ const roomZone = new Uint8Array(GRID * GRID);
 const roomCoreBuf = new Uint8Array(GRID * GRID);
 const roomCoreId = new Int32Array(GRID * GRID);
 const roomCellCore = new Int32Array(GRID * GRID);
+const structWallBuf = new Uint8Array(GRID * GRID);  // cells covered by a wall:true structure (Bush) — block pathing
+// Mark every wall:true structure's footprint into the given bitmaps (Bush acts like a wall).
+function markWallStructures(...bufs) {
+  for (const s of structures) {
+    const d = STRUCT_DEFS[s.type];
+    if (!d.wall) continue;
+    for (let dy = 0; dy < d.size; dy++) for (let dx = 0; dx < d.size; dx++) {
+      const i = (s.y + dy) * GRID + (s.x + dx);
+      for (const b of bufs) b[i] = 1;
+    }
+  }
+}
 const yellowFlowerBuf = new Uint8Array(GRID * GRID);  // 1 where a basic (yellow) Flowers tile covers — always a wall, so the per-phase model can't see it as a doorway
 const ROOM_MIN_AREA = 50;
 // Per-room analysis for the shift overlay + opening averages: one entry per detected
@@ -1627,16 +1644,16 @@ function strengthGradient(t, alpha) {
   const mix = j => Math.round(a[j] + (b[j] - a[j]) * k);
   return `rgba(${mix(0)},${mix(1)},${mix(2)},${alpha == null ? 0.72 : alpha})`;
 }
-// Paint the room overlay: each base coloured by its AVERAGE strength on an ABSOLUTE
-// 1..100 scale — 1 = red, 100 = purple (the best base is always 100). So a map whose
-// weakest base scores 50 shows it mid-gradient, not red. Falls back to distinct hues
-// when strengths weren't computed (base-strength.js missing / errored).
+// Paint the room overlay: each base coloured by its AVERAGE strength as a fraction of
+// the strongest base — strength100 / 100. The best base is 100 (purple); a base half as
+// strong is 50 (mid-gradient); nothing is forced to the red floor. Falls back to distinct
+// hues when strengths weren't computed (base-strength.js missing / errored).
 function paintRoomOverlay() {
   roomOverlayCtx.clearRect(0, 0, GRID, GRID);
   const graded = roomData.length > 0 && roomData.every(r => r.strength != null);
   roomData.forEach((r, i) => {
     roomOverlayCtx.fillStyle = graded
-      ? strengthGradient((r.strength - 1) / 99)   // strength is 1..100 (100 = strongest base)
+      ? strengthGradient(r.strength / 100)        // strength100: 100 = strongest base, 50 = half as strong
       : `hsla(${(i * 53 + 280) % 360}, 80%, 58%, 0.65)`;
     for (const rr of r.rects || []) roomOverlayCtx.fillRect(rr.x0, GRID - 1 - rr.y1, rr.x1 - rr.x0 + 1, rr.y1 - rr.y0 + 1);  // y-flip
   });
@@ -1647,7 +1664,9 @@ function recomputeRooms() {
   roomData = [];
   roomOverlayCtx.clearRect(0, 0, GRID, GRID);
   const total = GRID * GRID;
-  const isOpen = i => playableBuf[i] === 1 && occ[i] === 0;
+  // wall:true structures (Bush) block the open space, just like a tile wall.
+  structWallBuf.fill(0); markWallStructures(structWallBuf);
+  const isOpen = i => playableBuf[i] === 1 && occ[i] === 0 && structWallBuf[i] === 0;
 
   // Refresh the per-phase wall bitmaps (always-walls + that phase's flowers) so the
   // base-strength model sees current geometry regardless of recomputeValidity order.
@@ -1660,6 +1679,7 @@ function recomputeRooms() {
     if (always || t.type === 'BlueFlowers') markInto(blueOccBuf, t.x, t.y);
     if (t.type === 'Flowers') markInto(yellowFlowerBuf, t.x, t.y);
   }
+  markWallStructures(redOccBuf, blueOccBuf);   // Bush blocks both phases for the strength model
 
   // erode by Chebyshev-2 (5x5 all-open) — pinches off openings <= 4 wide/tall
   roomCoreBuf.fill(0);
@@ -1850,7 +1870,7 @@ function buildRogueBankXML() {
 // mirror flags let load() reconstruct the reflected copies.
 function buildBankXML() {
   if (MODES[state.gameMode].rogue) return buildRogueBankXML();
-  const byType = { TallShrubs: [], Flowers: [], RedFlowers: [], BlueFlowers: [] };
+  const byType = {}; for (const ty of TILE_TYPES) byType[ty] = [];
   for (const t of placedTiles) if (inCanonical(t.x, t.y)) byType[t.type].push(t);
   // Player Spawner + Castle key off the forced mirror; other objects off the effective.
   const psCanon = playerSpawners.filter(ps => inCanonicalForced(ps.x, ps.y));
